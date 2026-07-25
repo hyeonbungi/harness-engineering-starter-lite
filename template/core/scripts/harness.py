@@ -89,6 +89,23 @@ def read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def validate_claude_entrypoint() -> None:
+    path = ROOT / "CLAUDE.md"
+    try:
+        lines = [
+            line.strip()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except OSError as exc:
+        raise HarnessFailure(f"cannot read CLAUDE.md: {exc}") from exc
+    if not lines or lines[0] != "@AGENTS.md":
+        raise HarnessFailure(
+            "CLAUDE.md must begin with a standalone @AGENTS.md import so "
+            "shared instructions have one source of truth."
+        )
+
+
 def atomic_write_text(path: Path, payload: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
@@ -1148,6 +1165,7 @@ def audit_repository(
             + ", ".join(missing)
             + ". Restore them before continuing."
         )
+    validate_claude_entrypoint()
     config = read_json(CONFIG_PATH)
     validate_config(config, template_mode=template_mode)
     features_data = read_json(feature_path(config))

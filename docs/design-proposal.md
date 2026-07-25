@@ -14,6 +14,7 @@
 | 기능별 실행 검증 | `verification.bindings` | 누락·프로필 밖·미실행 gate 거부 |
 | 증거 신선도 | receipt·config·verification·tracked file hash와 revision | 불완전·변조·stale `passing` 거부·재개 |
 | 제한 runner | repo `cwd`, timeout, bounded/redacted log | hang·대출력·누락 실행 파일 Fixture |
+| Claude Code 진입점 | root/Core `CLAUDE.md`의 `@AGENTS.md` import | root validator·설치본 audit·드리프트 실패 Fixture |
 | 네이티브 Windows 어댑터 | `init.ps1`, current-Python token, Windows process tree | 정적·모의 Windows Fixture와 조건부 네이티브 실행 |
 | 자료 처분·독립 해석 | 65행 결정표 + 설치본 `source-map.json` | 원장 65/65·양방향 연결 |
 | 배포 수명주기 | `VERSION`, `LICENSE`, `NOTICE`, install manifest | 실제 patch upgrade·version guard·rollback·remove Fixture |
@@ -41,7 +42,7 @@
 ```text
 project/
 ├── AGENTS.md
-├── CLAUDE.md                    # 선택: AGENTS.md를 가리키는 얇은 포인터
+├── CLAUDE.md                    # @AGENTS.md를 가져오는 Claude Code 진입점
 ├── VERSION
 ├── LICENSE
 ├── NOTICE
@@ -81,8 +82,9 @@ project/
 | Source·Component 원장 | 65개 근거와 18개 구성 요소의 양방향 추적 | `SRC-REF-002`, `SRC-ADV-025..026` | 원장 유지 비용 대신 독립 감사 가능 |
 | 버전·라이선스·수명주기 | 안전한 복제·갱신·제거 경계 | `SRC-RES-001`, `SRC-ADV-002` | manifest 파일 증가, 대신 로컬 변경 보호 |
 
-`CLAUDE.md`는 `AGENTS.md`를 복제하지 않고 짧은 포인터로 둡니다. 여러
-에이전트 진입점을 지원하면서 규칙 드리프트를 줄이기 위한 선택입니다.
+`CLAUDE.md`는 첫 비어 있지 않은 줄의 `@AGENTS.md` import로 공통 규칙을
+가져오고 내용을 복제하지 않습니다. 여러 에이전트 진입점을 지원하면서 규칙
+드리프트를 줄이며, root validator와 설치본 audit가 이 계약을 검사합니다.
 
 ### Standard: 트리거가 있을 때 설치
 
@@ -102,7 +104,7 @@ project/
 - 독립 평가자·루브릭: `SRC-CH-009`, `SRC-TPL-005`, `SRC-PRJ-006`
 
 Standard/Advanced는 후속 설계 카탈로그로만 유지합니다. 이를 패키징하는
-`HST-006`은 Core `0.2.0`의 `out_of_scope`이며, 관찰된 병목과 명시적
+`HST-006`은 Core `0.2.1`의 `out_of_scope`이며, 관찰된 병목과 명시적
 재범위 결정이 있는 미래 릴리스에서만 다시 엽니다.
 
 ## 실행 계약
@@ -220,8 +222,9 @@ digest, revision, OS·Python runtime identity를 기록합니다.
 4. 빈 Fixture에서 콜드 스타트와 이중 실행 검증 — 완료
 5. 기능 연결·신선도·runner·설치 경계·65개 Source·배포 수명주기 보강 — 완료
 6. PowerShell 진입점·Windows process/path/receipt 어댑터 추가 — 완료
-7. Standard 모듈 패키징 — 현재 `0.2.0` 범위 밖, 미래 릴리스의 명시적 재범위 필요
-8. Advanced 모듈 패키징 — 현재 `0.2.0` 범위 밖, 병목·가치 증거와 명시적 재범위 필요
+7. Claude Code `@AGENTS.md` import와 드리프트 거부 검사 추가 — 완료
+8. Standard 모듈 패키징 — 현재 `0.2.1` 범위 밖, 미래 릴리스의 명시적 재범위 필요
+9. Advanced 모듈 패키징 — 현재 `0.2.1` 범위 밖, 병목·가치 증거와 명시적 재범위 필요
 
 ## 성능·유지보수
 

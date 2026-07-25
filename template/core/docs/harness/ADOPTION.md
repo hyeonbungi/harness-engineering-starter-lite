@@ -27,6 +27,11 @@ root. Use a canonical target path. A successful install writes
 `.harness/install-manifest.json` with the Core version and managed-file digests.
 Keep this manifest; upgrade and removal use it as their ownership boundary.
 
+Claude Code loads the shared agent contract through the first non-empty line of
+`CLAUDE.md`: `@AGENTS.md`. Keep shared rules in `AGENTS.md`; add Claude-only
+notes below the import only when a concrete project need appears. `audit`
+rejects a missing or replaced import.
+
 Rejecting every reparse point is deliberately conservative. A project under a
 provider-managed mount may need a canonical local NTFS path or a reviewed manual
 install. UNC and network-filesystem atomicity are outside the automatic lifecycle

@@ -43,6 +43,13 @@ def gate_command(level: str, exit_code: int = 0) -> dict[str, object]:
     }
 
 
+def next_patch_version(version: str) -> str:
+    major, minor, patch = (
+        int(part) for part in version.split("-", 1)[0].split(".")
+    )
+    return f"{major}.{minor}.{patch + 1}"
+
+
 class CoreProfileTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="harness-core-fixture-")
@@ -519,8 +526,9 @@ class CoreProfileTest(unittest.TestCase):
             len([path for path in (ROOT / "template/core").rglob("*") if path.is_file()]),
         )
 
+        patch_version = next_patch_version(manifest["version"])
         patch_installer = self.make_release(
-            "0.2.1",
+            patch_version,
             changed_files=("NOTICE",),
         )
         upgrade_preview = subprocess.run(
@@ -551,13 +559,13 @@ class CoreProfileTest(unittest.TestCase):
         )
         self.assertEqual(upgraded.returncode, 0, upgraded.stdout + upgraded.stderr)
         self.assertIn("backup:", upgraded.stdout)
-        self.assertEqual((target / "VERSION").read_text().strip(), "0.2.1")
+        self.assertEqual((target / "VERSION").read_text().strip(), patch_version)
         self.assertIn(
-            "Fixture release 0.2.1 change.",
+            f"Fixture release {patch_version} change.",
             (target / "NOTICE").read_text(encoding="utf-8"),
         )
         upgraded_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        self.assertEqual(upgraded_manifest["version"], "0.2.1")
+        self.assertEqual(upgraded_manifest["version"], patch_version)
 
         product_file = target / "product.txt"
         product_file.write_text("project-owned\n", encoding="utf-8")
@@ -670,7 +678,11 @@ class CoreProfileTest(unittest.TestCase):
 
         incoming = self.base / "rollback-incoming"
         shutil.copytree(ROOT / "template/core", incoming)
-        (incoming / "VERSION").write_text("0.2.1\n", encoding="utf-8")
+        current_version = (target / "VERSION").read_text(encoding="utf-8").strip()
+        (incoming / "VERSION").write_text(
+            next_patch_version(current_version) + "\n",
+            encoding="utf-8",
+        )
         for relative in ("NOTICE",):
             path = incoming / relative
             path.write_text(
@@ -771,7 +783,13 @@ class CoreProfileTest(unittest.TestCase):
         original_version = (upgrade_target / "VERSION").read_bytes()
         incoming = self.base / "partial-upgrade-incoming"
         shutil.copytree(ROOT / "template/core", incoming)
-        (incoming / "VERSION").write_text("0.2.1\n", encoding="utf-8")
+        current_version = (upgrade_target / "VERSION").read_text(
+            encoding="utf-8"
+        ).strip()
+        (incoming / "VERSION").write_text(
+            next_patch_version(current_version) + "\n",
+            encoding="utf-8",
+        )
         added_source = incoming / "new/NEW-MANAGED.txt"
         added_source.parent.mkdir()
         added_source.write_text("incoming\n", encoding="utf-8")
@@ -891,6 +909,28 @@ class CoreProfileTest(unittest.TestCase):
         self.assertEqual(answers["current"]["next_feature"]["id"], "BOOT-001")
         start = self.run_cli("run", "start")
         self.assertEqual(start.returncode, 0, start.stdout + start.stderr)
+
+    def test_claude_entrypoint_imports_agents_and_rejects_drift(self) -> None:
+        for path in (
+            ROOT / "CLAUDE.md",
+            ROOT / "template/core/CLAUDE.md",
+            self.target / "CLAUDE.md",
+        ):
+            lines = [
+                line.strip()
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertTrue(lines, f"{path} must not be empty")
+            self.assertEqual(lines[0], "@AGENTS.md")
+
+        (self.target / "CLAUDE.md").write_text(
+            "# CLAUDE.md\n\nRead AGENTS.md manually.\n",
+            encoding="utf-8",
+        )
+        rejected = self.run_cli("audit")
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("@AGENTS.md", rejected.stderr)
 
     def test_powershell_adapters_have_a_safe_static_contract(self) -> None:
         for path in (ROOT / "init.ps1", ROOT / "template/core/init.ps1"):

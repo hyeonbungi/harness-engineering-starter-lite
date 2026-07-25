@@ -17,7 +17,9 @@
 - 원장 대조: 65개 경로·크기·SHA-256 접두사가 현재 원본과 일치
 - 자료 처분: 65행 결정표와 설치본 독립 Source map 일치
   (`core-direct` 28, `merged` 8, `deferred` 19, `reference-only` 10)
-- 복제 패키지: `template/core/` 18개 파일, Core 버전 `0.2.0`
+- 복제 패키지: `template/core/` 18개 파일, Core 버전 `0.2.1`
+- 지침 진입점: root/Core `CLAUDE.md`의 첫 비어 있지 않은 줄이
+  `@AGENTS.md`이며 validator와 설치본 audit가 드리프트를 거부
 - 운영체제 진입점: POSIX `init.sh`, Windows PowerShell 5.1+ `init.ps1`
 - Python 선택: PowerShell에서 venv/Conda, `py -3`, `python`, `python3`
   순으로 3.10+를 검사하며 probe 중 자동 설치를 막고 환경을 원복
@@ -48,11 +50,12 @@
   Component `sources`는 좁은 직접 근거이며 부분집합 계약을 validator가 검사
 - Fixture: 빈 임시 프로젝트 설치·실제 patch upgrade·rollback·버전 거부·
   link/junction/reparse·Windows path alias, 운영체제별 init 계약, 콜드 스타트,
-  WIP·영수증 불변식·schema migration, hash/digest/Git/runtime freshness,
+  Claude import 드리프트, WIP·영수증 불변식·schema migration,
+  hash/digest/Git/runtime freshness,
   자식 process-tree timeout·cwd·로그 제한, 부분 실패 회수,
   POSIX·Python·Node 대표 스택, 실패·클린 상태·고위험 게이트 검증
-- 프로젝트 기준선: `./init.sh`에서 필수 산출물 32/32, 현재 원본
-  65/65 hash, Core 감사, 동적 Fixture 총 37개 중 36개 통과, 네이티브
+- 프로젝트 기준선: `./init.sh`에서 필수 산출물 33/33, 현재 원본
+  65/65 hash, Core 감사, 동적 Fixture 총 38개 중 37개 통과, 네이티브
   PowerShell Fixture 1개는 현재 비-Windows 호스트에서 명시적 skip
 - 현재 프로젝트: 로컬 `main` Git 저장소와 공개 원격
   `https://github.com/hyeonbungi/harness-engineering-starter-lite`를 사용
@@ -62,8 +65,10 @@
 - `HST-007` Core 신뢰성·배포 계약 보강을 실행 증거와 함께 완료했습니다.
 - `HST-008` 네이티브 Windows PowerShell·프로세스·경로 어댑터를
   `0.2.0`으로 구현하고 현재 호스트에서 가능한 검증을 완료했습니다.
+- `HST-009`에서 root/Core `CLAUDE.md`를 `@AGENTS.md` import로 축소하고,
+  드리프트 거부 검사를 추가한 `0.2.1` patch를 검증했습니다.
 - `HST-006` Standard/Advanced 선택형 모듈은 사용자 결정에 따라 현재
-  `0.2.0` 릴리스의 `out_of_scope`로 마감합니다.
+  `0.2.1` 릴리스에서도 `out_of_scope`로 유지합니다.
 - 네이티브 Windows 실기 결과는 Windows/PowerShell 환경이 생길 때 추가할
   향후 검증 증거이며, 현재 릴리스의 다음 작업이나 완료 차단 조건이 아닙니다.
 - 원본 자료의 완전성 원장과 설계 추적성을 유지합니다.
@@ -78,6 +83,8 @@
   회귀한 기능은 다시 엽니다.
 - `0.1.x → 0.2.0`은 pre-1.0 minor 전환이므로 자동 upgrade를 거부하고
   별도 검토한 수동 채택과 schema-v3 재검증을 요구합니다.
+- `0.2.0 → 0.2.1`은 설치 원장의 로컬 변경 보호를 거치는 호환 patch
+  upgrade입니다.
 
 ## 열린 위험
 
@@ -89,7 +96,7 @@
   실제 Windows `taskkill`, 실제 junction 경계를 실행하지 못했습니다.
   정적·모의 검증과 Windows에서 자동 실행되는 조건부 Fixture는 준비됐지만,
   네이티브 Windows 통과 결과는 환경이 마련될 때 추가할 향후 검증 증거로만
-  남깁니다. 이는 현재 구현 미완료나 `0.2.0` 릴리스 차단을 뜻하지 않습니다.
+  남깁니다. 이는 현재 구현 미완료나 `0.2.1` 릴리스 차단을 뜻하지 않습니다.
 - 모든 Windows reparse point를 보수적으로 거부하므로 provider-managed
   mount에서 오탐할 수 있습니다. UNC·네트워크 파일시스템 원자성도 자동
   보장 범위가 아닙니다.
@@ -106,7 +113,7 @@
 
 ## 다음 행동
 
-- 현재 릴리스의 필수 후속 작업은 없습니다. Core `0.2.0`을 현재 범위에서
+- 현재 릴리스의 필수 후속 작업은 없습니다. Core `0.2.1`을 현재 범위에서
   마감합니다.
 - 네이티브 Windows 실행 결과는 Windows/PowerShell 환경이 생길 때 추가할
   향후 검증 증거이며, 현재 완료 상태를 열어 두지 않습니다.

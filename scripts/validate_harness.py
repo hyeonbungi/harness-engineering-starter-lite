@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REQUIRED_FILES = (
     "AGENTS.md",
+    "CLAUDE.md",
     "LICENSE",
     "NOTICE",
     "README.md",
@@ -61,6 +62,22 @@ def validate_required_files() -> None:
             "required starter artifacts are missing: "
             + ", ".join(missing)
             + ". Restore them before continuing."
+        )
+
+
+def validate_claude_entrypoint(path: Path) -> None:
+    try:
+        lines = [
+            line.strip()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except OSError as exc:
+        fail(f"cannot read {path.relative_to(ROOT)}: {exc}")
+    if not lines or lines[0] != "@AGENTS.md":
+        fail(
+            f"{path.relative_to(ROOT)} must begin with a standalone @AGENTS.md "
+            "import so shared instructions have one source of truth."
         )
 
 
@@ -384,6 +401,8 @@ def validate_core_profile(source_ids: set[str]) -> None:
 
 def main() -> None:
     validate_required_files()
+    validate_claude_entrypoint(ROOT / "CLAUDE.md")
+    validate_claude_entrypoint(ROOT / "template/core/CLAUDE.md")
     source_ids, source_live = validate_source_traceability()
     validate_feature_list(source_ids)
     validate_core_profile(source_ids)

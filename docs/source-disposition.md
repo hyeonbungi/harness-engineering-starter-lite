@@ -45,7 +45,7 @@
 | SRC-CH-012 | `CHAPTER 12. 모든 세션은 클린 상태(clean state)로 끝나야 한다.md` | core-direct | 검증·상태·임시 산출물·재시작성·다음 행동의 클린 종료 검사 | HC-004, HC-005, HC-014, advanced:quality-ablation | 클린 상태와 안전한 제거·롤백은 Core에서 직접 검사하고 품질 추세·절제 실험은 고급 프로필로 보류합니다. |
 | SRC-RES-001 | `리소스/index.md` | core-direct | 최소 팩으로 시작하고 관찰된 필요에 따라 고급 팩으로 승격 | HC-008 | Core 채택 절차와 프로필 경계의 직접 근거입니다. |
 | SRC-TPL-001 | `리소스/templates/AGENTS.md` | core-direct | 시작·작업·완료·종료를 라우팅하는 공통 에이전트 계약 | HC-001 | 설치된 AGENTS 라우터의 직접 템플릿 근거입니다. |
-| SRC-TPL-002 | `리소스/templates/CLAUDE.md` | core-direct | Claude 진입점을 제공하되 공통 규칙은 중복하지 않음 | HC-009 | 드리프트를 줄이기 위해 원문 전체 대신 얇은 포인터로 보정해 채택합니다. |
+| SRC-TPL-002 | `리소스/templates/CLAUDE.md` | core-direct | Claude 진입점을 제공하되 공통 규칙은 중복하지 않음 | HC-009 | 드리프트를 줄이기 위해 원문 전체 대신 `@AGENTS.md` import로 보정해 채택합니다. |
 | SRC-TPL-003 | `리소스/templates/claude-progress.md` | core-direct | 현재 진행·증거·다음 행동을 bounded snapshot에 남김 | HC-004 | 별도 진행 파일을 추가하지 않고 STATE에 통합해 상태 중복을 막습니다. |
 | SRC-TPL-004 | `리소스/templates/clean-state-checklist.md` | core-direct | 종료 전에 검증·재시작성·미검증 작업·임시 파일을 점검 | HC-004, HC-005 | 클린 상태 감사와 STATE 일관성 검사의 직접 근거입니다. |
 | SRC-TPL-005 | `리소스/templates/evaluator-rubric.md` | deferred | 정확성·범위·신뢰성·인계를 독립적으로 평가 | advanced:independent-evaluator | Lite는 고정 게이트만 설치하고 주관적·고위험 평가가 필요할 때 루브릭을 추가합니다. |

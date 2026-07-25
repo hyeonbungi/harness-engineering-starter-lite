@@ -139,15 +139,15 @@
       "id": "HC-009",
       "path": "CLAUDE.md",
       "profile": "core",
-      "purpose": "Provide a thin Claude entrypoint without duplicating common rules.",
+      "purpose": "Import the shared AGENTS.md contract through a thin Claude Code entrypoint.",
       "applies_when": "When Claude-compatible agents may enter the repository.",
       "sources": [
         "SRC-TPL-002",
         "SRC-CH-004"
       ],
       "validation": ["python3 scripts/harness.py audit"],
-      "review_trigger": "Claude-specific text begins duplicating AGENTS.md.",
-      "rollback": "Return to a thin pointer and keep common rules in AGENTS.md."
+      "review_trigger": "The @AGENTS.md import is removed or Claude-specific text duplicates shared rules.",
+      "rollback": "Restore the @AGENTS.md import and keep common rules in AGENTS.md."
     },
     {
       "id": "HC-010",

@@ -229,7 +229,7 @@
         "SRC-ADV-002",
         "SRC-ADV-010"
       ],
-      "notes": "This is a Core portability adapter, not part of optional HST-006 governance and observability. The current host has no pwsh/powershell, so native PowerShell parsing/execution, real taskkill, and a real Windows junction remain unexecuted locally. These checks are retained as future verification evidence when a Windows/PowerShell runner is available; they are not pending implementation or a Core 0.2.0 completion blocker."
+      "notes": "This is a Core portability adapter, not part of optional HST-006 governance and observability. The current host has no pwsh/powershell, so native PowerShell parsing/execution, real taskkill, and a real Windows junction remain unexecuted locally. These checks are retained as future verification evidence when a Windows/PowerShell runner is available; they are not pending implementation or a Core 0.2.x completion blocker."
     },
     {
       "id": "HST-006",
@@ -249,7 +249,33 @@
         "SRC-SKL-001",
         "SRC-PRJ-005..007"
       ],
-      "notes": "Intentionally out of scope for Core 0.2.0 by user decision on 2026-07-25. Reconsider only when a future release explicitly re-scopes an observed governance or observability bottleneck; this is not pending work for the current release."
+      "notes": "Intentionally out of scope for the Core 0.2.x release line, including 0.2.1, by user decision on 2026-07-25. Reconsider only when a future release explicitly re-scopes an observed governance or observability bottleneck; this is not pending work for the current release."
+    },
+    {
+      "id": "HST-009",
+      "priority": 9,
+      "area": "instruction-entrypoint",
+      "title": "Import shared agent instructions from Claude Code",
+      "behavior": "Claude Code loads the shared AGENTS.md contract through a minimal CLAUDE.md import in both the starter repository and every installed Core profile without duplicating shared instructions.",
+      "status": "passing",
+      "verification": [
+        "Keep root and Core CLAUDE.md as a minimal standalone @AGENTS.md import.",
+        "Reject a missing or replaced Claude import during root and installed Core audit.",
+        "Install the Core profile in a fixture and prove the Claude import passes audit.",
+        "Preserve all existing lifecycle, platform, evidence, and source-traceability fixtures."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 33/33, live source traceability 65/65, Core self-audit, and 38 dynamic Fixture tests discovered: 37 passed, 1 explicit non-Windows PowerShell test skipped (2026-07-25)",
+        "tests/test_core_profile.py::test_claude_entrypoint_imports_agents_and_rejects_drift -> root, distribution, and installed CLAUDE.md import verified; prose-only replacement rejected by Core audit (2026-07-25)",
+        "scripts/validate_harness.py + template/core/scripts/harness.py -> first non-empty CLAUDE.md line must be standalone @AGENTS.md in root and installed Core (2026-07-25)",
+        "root/Core VERSION 0.2.1 + version-independent next-patch lifecycle Fixtures -> install, patch upgrade, rollback, and partial-create recovery passing (2026-07-25)"
+      ],
+      "sources": [
+        "SRC-CH-004",
+        "SRC-TPL-001",
+        "SRC-TPL-002"
+      ],
+      "notes": "Completed by explicit user decision on 2026-07-25; AGENTS.md remains the single source of shared agent instructions and Claude-only notes may follow the import when a concrete need appears."
     }
   ]
 }

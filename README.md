@@ -10,6 +10,7 @@
 ## 현재 산출물
 
 - [`AGENTS.md`](AGENTS.md): 이 저장소에서 작업하는 에이전트의 짧은 라우터
+- [`CLAUDE.md`](CLAUDE.md): Claude Code가 `AGENTS.md`를 가져오는 얇은 진입점
 - [`feature_list.json`](feature_list.json): 구현 범위와 검증 상태의 기계 판독 원장
 - [`docs/STATE.md`](docs/STATE.md): 현재 상태, 위험, 다음 행동의 단일 인간용 표면
 - [`docs/source-inventory.md`](docs/source-inventory.md): 원본 65개 파일의 전수 원장
@@ -52,6 +53,10 @@ point, 프로젝트 밖으로 해석되는 경로, 대소문자 alias, 기존 �
    `.\init.ps1 -Setup`을 실행한 뒤 같은 어댑터를 한 번 더 실행합니다.
 5. 어댑터가 선택한 Python으로 `scripts/harness.py cold-start --json`을
    실행해 다섯 가지 콜드 스타트 답변을 확인합니다.
+
+Claude Code는 `CLAUDE.md`의 `@AGENTS.md` import를 통해 같은 공통 규칙을
+읽습니다. 공통 규칙을 두 파일에 복제하지 말고 Claude 전용 지침이 실제로
+필요할 때만 import 아래에 추가합니다.
 
 자세한 절차는
 [`template/core/docs/harness/ADOPTION.md`](template/core/docs/harness/ADOPTION.md)에
