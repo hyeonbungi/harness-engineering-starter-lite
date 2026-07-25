@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "configured": false,
+  "project": {
+    "name": "REPLACE_ME",
+    "summary": "REPLACE_ME",
+    "architecture": "docs/ARCHITECTURE.md"
+  },
+  "paths": {
+    "feature_list": "feature_list.json",
+    "state": "docs/STATE.md",
+    "evidence_dir": ".harness/evidence"
+  },
+  "commands": {
+    "setup": {
+      "argv": [],
+      "cwd": ".",
+      "timeout_seconds": 300,
+      "required": false,
+      "unavailable_reason": "REPLACE_ME: configure setup or explain why this project needs none."
+    },
+    "start": {
+      "argv": [],
+      "cwd": ".",
+      "timeout_seconds": 300,
+      "required": false,
+      "unavailable_reason": "REPLACE_ME: configure start or explain why this project has no runtime process."
+    }
+  },
+  "runner": {
+    "default_timeout_seconds": 300,
+    "max_output_bytes": 65536
+  },
+  "gates": {
+    "V0": {
+      "description": "Repository structure, configuration, and static syntax.",
+      "commands": []
+    },
+    "V1": {
+      "description": "Focused lint, type, unit, or contract verification.",
+      "commands": [
+        {
+          "id": "core-init-first",
+          "name": "Core initialization first pass",
+          "argv": [
+            "{python}",
+            "scripts/harness.py",
+            "init"
+          ],
+          "cwd": ".",
+          "timeout_seconds": 60,
+          "why": "The standard startup path must succeed before the harness is complete.",
+          "fix": "Run the platform adapter (./init.sh or .\\init.ps1), repair the reported configuration or file issue, and retry."
+        },
+        {
+          "id": "core-init-repeat",
+          "name": "Core initialization repeat pass",
+          "argv": [
+            "{python}",
+            "scripts/harness.py",
+            "init"
+          ],
+          "cwd": ".",
+          "timeout_seconds": 60,
+          "why": "Initialization must be safe to repeat without hidden one-time state.",
+          "fix": "Make setup and startup checks idempotent, then run the platform adapter twice."
+        },
+        {
+          "id": "core-cold-start",
+          "name": "Core cold-start answers",
+          "argv": [
+            "{python}",
+            "scripts/harness.py",
+            "cold-start",
+            "--json"
+          ],
+          "cwd": ".",
+          "timeout_seconds": 30,
+          "why": "A fresh session must recover the five required answers from repository files.",
+          "fix": "Complete project metadata, architecture, commands, validation, and current state."
+        }
+      ]
+    },
+    "V2": {
+      "description": "Startup, runtime, and integration verification.",
+      "commands": []
+    },
+    "V3": {
+      "description": "User-visible or cross-component end-to-end journey.",
+      "commands": []
+    },
+    "V4": {
+      "description": "Risk-triggered security, performance, or recovery verification.",
+      "commands": []
+    }
+  },
+  "risk_profiles": {
+    "docs_only": {
+      "enabled": true,
+      "levels": [
+        "V0"
+      ],
+      "description": "Documentation or metadata-only changes."
+    },
+    "local_code": {
+      "enabled": true,
+      "levels": [
+        "V0",
+        "V1"
+      ],
+      "description": "Local code changes without runtime or boundary effects."
+    },
+    "runtime_change": {
+      "enabled": false,
+      "levels": [
+        "V0",
+        "V1",
+        "V2"
+      ],
+      "description": "Changes to startup, persistence, services, or runtime behavior.",
+      "unavailable_reason": "Configure V1 and V2 commands before enabling this profile."
+    },
+    "cross_component": {
+      "enabled": false,
+      "levels": [
+        "V0",
+        "V1",
+        "V2",
+        "V3"
+      ],
+      "description": "User-visible or cross-component behavior changes.",
+      "unavailable_reason": "Configure V1 through V3 commands before enabling this profile."
+    },
+    "high_risk": {
+      "enabled": false,
+      "levels": [
+        "V0",
+        "V1",
+        "V2",
+        "V3",
+        "V4"
+      ],
+      "description": "Security, performance, destructive, or recovery-sensitive changes.",
+      "unavailable_reason": "Configure all gate levels before enabling this profile."
+    }
+  },
+  "startup_profile": "docs_only",
+  "clean_state": {
+    "required_state_sections": [
+      "## Project",
+      "## Current verified state",
+      "## Risks",
+      "## Next action"
+    ],
+    "forbidden_globs": [
+      "*.tmp",
+      "*.bak",
+      "debug.log"
+    ]
+  }
+}

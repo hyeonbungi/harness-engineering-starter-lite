@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "project": "REPLACE_ME",
+  "last_updated": "YYYY-MM-DD",
+  "rules": {
+    "max_active_features": 1,
+    "passing_requires_receipt": true
+  },
+  "status_legend": {
+    "not_started": "Work has not begun.",
+    "active": "This is the single current work item.",
+    "blocked": "A documented blocker prevents progress.",
+    "passing": "Required gates passed and a durable receipt is recorded."
+  },
+  "features": [
+    {
+      "id": "BOOT-001",
+      "priority": 1,
+      "area": "bootstrap",
+      "title": "Configure and verify the project harness",
+      "behavior": "A fresh session can understand, start, verify, and resume this project from repository files.",
+      "status": "not_started",
+      "risk_profile": "local_code",
+      "verification": [
+        {
+          "id": "BOOT-001-V1",
+          "description": "Audit the configured Core contract without secrets or placeholders.",
+          "bindings": [
+            {
+              "level": "V0",
+              "command_id": "harness-audit"
+            }
+          ]
+        },
+        {
+          "id": "BOOT-001-V2",
+          "description": "Run the standard initialization path twice successfully.",
+          "bindings": [
+            {
+              "level": "V1",
+              "command_id": "core-init-first"
+            },
+            {
+              "level": "V1",
+              "command_id": "core-init-repeat"
+            }
+          ]
+        },
+        {
+          "id": "BOOT-001-V3",
+          "description": "Produce all five cold-start answers from repository files.",
+          "bindings": [
+            {
+              "level": "V1",
+              "command_id": "core-cold-start"
+            }
+          ]
+        }
+      ],
+      "tracked_files": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "LICENSE",
+        "NOTICE",
+        "VERSION",
+        "docs/ARCHITECTURE.md",
+        "docs/VALIDATION.md",
+        "docs/harness/ADOPTION.md",
+        "docs/harness/LIFECYCLE.md",
+        "docs/harness/SOURCES.md",
+        "docs/harness/components.json",
+        "docs/harness/source-map.json",
+    "harness.config.json",
+    "init.sh",
+    "init.ps1",
+    "scripts/harness.py"
+      ],
+      "evidence": [],
+      "history": [],
+      "sources": [
+        "SRC-CH-003",
+        "SRC-CH-005..008",
+        "SRC-REF-001",
+        "SRC-REF-004"
+      ],
+      "notes": ""
+    }
+  ]
+}

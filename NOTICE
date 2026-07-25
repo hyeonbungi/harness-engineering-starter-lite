@@ -1,0 +1,16 @@
+Harness Engineering Starter Lite
+Copyright (c) 2026 Harness Engineering Starter Lite contributors
+
+This distribution is a local adaptation informed by Learn Harness Engineering
+by Walking Labs:
+
+  Source: https://github.com/walkinglabs/learn-harness-engineering
+  Course: https://walkinglabs.github.io/learn-harness-engineering/ko/
+
+The mirrored course materials report the MIT License. This distribution adapts
+the course's operating principles and selected template patterns; it is not a
+verbatim copy and is not presented as an official Walking Labs distribution.
+
+Redistributions of this distribution should retain its LICENSE and this NOTICE.
+Upstream materials, when redistributed separately or substantially copied,
+remain subject to their own copyright and license notices.

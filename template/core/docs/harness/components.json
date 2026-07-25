@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "components": [
+    {
+      "id": "HC-001",
+      "path": "AGENTS.md",
+      "profile": "core",
+      "purpose": "Short request, startup, work, completion, and handoff router.",
+      "applies_when": "Always.",
+      "sources": [
+        "SRC-CH-003",
+        "SRC-CH-004",
+        "SRC-TPL-001",
+        "SRC-REF-006",
+        "SRC-ADV-003"
+      ],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "The router duplicates topic documents or becomes difficult to scan.",
+      "rollback": "Restore the previous validated router revision."
+    },
+    {
+      "id": "HC-002",
+      "path": "harness.config.json",
+      "profile": "core",
+      "purpose": "Declare project commands and risk profiles as safe argument arrays.",
+      "applies_when": "Always; project-specific values are required before activation.",
+      "sources": [
+        "SRC-CH-002",
+        "SRC-CH-006",
+        "SRC-TPL-008",
+        "SRC-ADV-010"
+      ],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "A project command or required verification level changes.",
+      "rollback": "Restore the previous configuration and rerun audit."
+    },
+    {
+      "id": "HC-003",
+      "path": "feature_list.json",
+      "profile": "core",
+      "purpose": "Machine truth for WIP, status, verification, evidence, and history.",
+      "applies_when": "Always.",
+      "sources": [
+        "SRC-CH-007",
+        "SRC-CH-008",
+        "SRC-TPL-006"
+      ],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "A state transition cannot represent current project truth.",
+      "rollback": "Restore the last receipt-backed feature state."
+    },
+    {
+      "id": "HC-004",
+      "path": "docs/STATE.md",
+      "profile": "core",
+      "purpose": "Bounded human snapshot of current state, risks, and next action.",
+      "applies_when": "Always.",
+      "sources": [
+        "SRC-CH-005",
+        "SRC-TPL-003",
+        "SRC-TPL-004",
+        "SRC-TPL-010"
+      ],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "The file accumulates history or disagrees with feature_list.json.",
+      "rollback": "Rebuild the snapshot from current machine state and receipts."
+    },
+    {
+      "id": "HC-005",
+      "path": "scripts/harness.py",
+      "profile": "core",
+      "purpose": "Audit, state transitions, gate execution, receipts, and cold-start answers.",
+      "applies_when": "Always.",
+      "sources": [
+        "SRC-CH-006",
+        "SRC-CH-008..012",
+        "SRC-TPL-004",
+        "SRC-REF-001",
+        "SRC-REF-004"
+      ],
+      "validation": [
+        "./init.sh",
+        "powershell.exe -NoProfile -File .\\init.ps1"
+      ],
+      "review_trigger": "A false pass, unsafe command path, or non-actionable error appears.",
+      "rollback": "Restore the previous script and validate existing receipts."
+    },
+    {
+      "id": "HC-006",
+      "path": "docs/ARCHITECTURE.md",
+      "profile": "core",
+      "purpose": "Answer the cold-start structure question and route boundary details.",
+      "applies_when": "Always at summary level; add deeper boundary documents only when real boundaries exist.",
+      "sources": [
+        "SRC-CH-003",
+        "SRC-CH-010",
+        "SRC-ADV-004",
+        "SRC-ADV-026"
+      ],
+      "validation": ["python3 scripts/harness.py cold-start --json"],
+      "review_trigger": "A domain, dependency direction, or runtime surface changes.",
+      "rollback": "Restore the last architecture map matching executable boundaries."
+    },
+    {
+      "id": "HC-007",
+      "path": "docs/VALIDATION.md",
+      "profile": "core",
+      "purpose": "Explain staged gates and golden journeys.",
+      "applies_when": "Always at summary level; enable stronger gates as risk increases.",
+      "sources": [
+        "SRC-CH-009",
+        "SRC-CH-010",
+        "SRC-ADV-023"
+      ],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "A required gate is skipped or no longer matches project risk.",
+      "rollback": "Restore the previous gate contract and reopen affected passing features."
+    },
+    {
+      "id": "HC-008",
+      "path": "docs/harness/ADOPTION.md",
+      "profile": "core",
+      "purpose": "Provide safe installation, configuration, validation, and removal steps.",
+      "applies_when": "During initial adoption and whenever the Core contract is upgraded or removed.",
+      "sources": [
+        "SRC-RES-001",
+        "SRC-REF-004",
+        "SRC-ADV-001",
+        "SRC-ADV-002"
+      ],
+      "validation": [
+        "./init.sh",
+        "powershell.exe -NoProfile -File .\\init.ps1"
+      ],
+      "review_trigger": "A fresh adopter cannot complete installation without hidden knowledge.",
+      "rollback": "Revert the adoption commit or remove only manifest-listed paths."
+    },
+    {
+      "id": "HC-009",
+      "path": "CLAUDE.md",
+      "profile": "core",
+      "purpose": "Provide a thin Claude entrypoint without duplicating common rules.",
+      "applies_when": "When Claude-compatible agents may enter the repository.",
+      "sources": [
+        "SRC-TPL-002",
+        "SRC-CH-004"
+      ],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "Claude-specific text begins duplicating AGENTS.md.",
+      "rollback": "Return to a thin pointer and keep common rules in AGENTS.md."
+    },
+    {
+      "id": "HC-010",
+      "path": "init.sh",
+      "profile": "core",
+      "purpose": "Provide a stable, repeatable POSIX startup preflight.",
+      "applies_when": "Always on supported POSIX environments.",
+      "sources": [
+        "SRC-CH-006",
+        "SRC-TPL-008",
+        "SRC-REF-001"
+      ],
+      "validation": ["./init.sh", "./init.sh"],
+      "review_trigger": "Startup needs hidden manual steps or is unsafe to repeat.",
+      "rollback": "Restore the previous wrapper and rerun the cold-start fixture twice."
+    },
+    {
+      "id": "HC-011",
+      "path": "docs/harness/SOURCES.md",
+      "profile": "core",
+      "purpose": "Preserve upstream attribution and explain stable source identifiers.",
+      "applies_when": "Always, including redistributed adaptations.",
+      "sources": [
+        "SRC-IDX-001"
+      ],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "Upstream source, license, or local inventory identifiers change.",
+      "rollback": "Restore the last verified attribution record."
+    },
+    {
+      "id": "HC-012",
+      "path": "docs/harness/components.json",
+      "profile": "core",
+      "purpose": "Machine ledger for every installed Core component and its source, trigger, validation, review, and rollback contract.",
+      "applies_when": "Always.",
+      "sources": ["SRC-CH-004", "SRC-ADV-024"],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "A managed Core file or its lifecycle contract changes.",
+      "rollback": "Restore the last manifest that exactly covers the installed Core files."
+    },
+    {
+      "id": "HC-013",
+      "path": "docs/harness/source-map.json",
+      "profile": "core",
+      "purpose": "Resolve all 65 stable source identifiers without requiring the starter design repository.",
+      "applies_when": "Always, especially when redistributing an adapted Core.",
+      "sources": ["SRC-IDX-001", "SRC-REF-002", "SRC-ADV-025"],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "The source inventory, disposition, or component mapping changes.",
+      "rollback": "Restore the source map matching the installed component ledger."
+    },
+    {
+      "id": "HC-014",
+      "path": "docs/harness/LIFECYCLE.md",
+      "profile": "core",
+      "purpose": "Define versioned install, upgrade, backup, rollback, manual merge, and removal behavior.",
+      "applies_when": "During every Core lifecycle operation.",
+      "sources": ["SRC-CH-005", "SRC-CH-012", "SRC-ADV-002"],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "The installer manifest schema, compatibility policy, or managed paths change.",
+      "rollback": "Restore the prior lifecycle contract together with its compatible installer."
+    },
+    {
+      "id": "HC-015",
+      "path": "VERSION",
+      "profile": "core",
+      "purpose": "Expose the installed Core release under a Semantic Versioning contract.",
+      "applies_when": "Always.",
+      "sources": ["SRC-CH-005", "SRC-ADV-002"],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "Any distributed Core artifact or compatibility contract changes.",
+      "rollback": "Restore the version matching the installed artifact set."
+    },
+    {
+      "id": "HC-016",
+      "path": "LICENSE",
+      "profile": "core",
+      "purpose": "Provide the reusable starter under the MIT license.",
+      "applies_when": "Always, including redistribution.",
+      "sources": ["SRC-IDX-001"],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "Project licensing changes.",
+      "rollback": "Restore the license approved for the distributed release."
+    },
+    {
+      "id": "HC-017",
+      "path": "NOTICE",
+      "profile": "core",
+      "purpose": "Preserve upstream attribution and distinguish the local adaptation.",
+      "applies_when": "Always, including redistribution.",
+      "sources": ["SRC-IDX-001"],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "Upstream attribution or adaptation ownership changes.",
+      "rollback": "Restore the notice matching the distributed source and license."
+    },
+    {
+      "id": "HC-018",
+      "path": "init.ps1",
+      "profile": "core",
+      "purpose": "Provide a native Windows PowerShell startup preflight equivalent to the POSIX init wrapper.",
+      "applies_when": "Always on supported native Windows PowerShell environments; preserve launcher discovery, repository-root working directory, setup argument forwarding, and child exit-code propagation.",
+      "sources": [
+        "SRC-CH-006",
+        "SRC-TPL-008",
+        "SRC-REF-001",
+        "SRC-REF-004"
+      ],
+      "validation": [
+        "powershell.exe -NoProfile -File .\\init.ps1",
+        "powershell.exe -NoProfile -File .\\init.ps1 -Setup"
+      ],
+      "review_trigger": "PowerShell launcher discovery, argument forwarding, working-directory, exit-code, or native Windows support behavior changes.",
+      "rollback": "Restore the previous validated PowerShell wrapper and rerun its launcher, setup, working-directory, and exit-code contract fixtures."
+    }
+  ]
+}

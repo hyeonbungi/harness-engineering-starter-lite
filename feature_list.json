@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "project": "harness-engineering-starter-lite",
+  "last_updated": "2026-07-25",
+  "rules": {
+    "max_active_features": 1,
+    "passing_requires_evidence": true,
+    "verification_must_not_be_weakened": true
+  },
+  "status_legend": {
+    "not_started": "Work has not begun.",
+    "active": "This is the single current work item.",
+    "blocked": "A documented blocker prevents progress.",
+    "out_of_scope": "Intentionally excluded from the current release; reconsider only after an explicit rescope decision.",
+    "passing": "Required verification ran successfully and evidence is recorded."
+  },
+  "features": [
+    {
+      "id": "HST-001",
+      "priority": 1,
+      "area": "research",
+      "title": "Inventory and analyze the complete learning corpus",
+      "behavior": "Every file in the read-only source folder is inventoried, readable, analyzed, and traceable.",
+      "status": "passing",
+      "verification": [
+        "Recursively count all source entries and files.",
+        "Read every file as UTF-8.",
+        "Hash every file and check exact duplicates.",
+        "Inspect links, embeds, attachments, and near-duplicate structure.",
+        "Record the result in docs/source-inventory.md and docs/source-analysis.md."
+      ],
+      "evidence": [
+        "65/65 source files read successfully",
+        "65 unique source IDs match 65 current source paths and SHA-256 prefixes",
+        "docs/source-inventory.md",
+        "docs/source-analysis.md"
+      ],
+      "sources": [
+        "SRC-IDX-001",
+        "SRC-CH-001..012",
+        "SRC-RES-001",
+        "SRC-TPL-001..010",
+        "SRC-REF-001..006",
+        "SRC-ADV-001..027",
+        "SRC-SKL-001",
+        "SRC-PRJ-001..007"
+      ],
+      "notes": "The source folder was not modified."
+    },
+    {
+      "id": "HST-002",
+      "priority": 2,
+      "area": "design",
+      "title": "Freeze the lite profile and traceability contract",
+      "behavior": "A maintainer can identify every core component, why it exists, when it applies, and which sources justify it.",
+      "status": "passing",
+      "verification": [
+        "Review docs/design-proposal.md for core, optional, and deferred components.",
+        "Confirm every proposed component has source references and an adoption trigger.",
+        "Confirm trade-offs and rollback paths are explicit."
+      ],
+      "evidence": [
+        "docs/design-proposal.md",
+        "README.md",
+        "AGENTS.md"
+      ],
+      "sources": [
+        "SRC-CH-002..012",
+        "SRC-RES-001",
+        "SRC-REF-005..006",
+        "SRC-ADV-001..027"
+      ],
+      "notes": "This establishes the design baseline, not the finished adopter template."
+    },
+    {
+      "id": "HST-003",
+      "priority": 3,
+      "area": "validation",
+      "title": "Implement a dependency-free baseline validator",
+      "behavior": "Running ./init.sh validates the current starter control plane without installing dependencies.",
+      "status": "passing",
+      "verification": [
+        "Run ./init.sh from the repository root.",
+        "Confirm required artifacts exist.",
+        "Confirm feature_list.json is valid and respects WIP and evidence rules."
+      ],
+      "evidence": [
+        "init.sh",
+        "scripts/validate_harness.py",
+        "./init.sh -> Baseline healthy (2026-07-25)"
+      ],
+      "sources": [
+        "SRC-CH-006",
+        "SRC-CH-008..010",
+        "SRC-TPL-006",
+        "SRC-TPL-008",
+        "SRC-REF-001",
+        "SRC-REF-004"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "HST-004",
+      "priority": 4,
+      "area": "core-profile",
+      "title": "Build the Core profile, configuration, state transitions, and fixture",
+      "behavior": "A new project can safely install the Core profile, configure command arrays, transition state with receipts, and pass a cold-start test.",
+      "status": "passing",
+      "verification": [
+        "Copy the profile into an empty fixture repository.",
+        "Configure setup, start, focused verification, and full verification.",
+        "Open a fresh session and answer the five cold-start questions from repository files only.",
+        "Run the standard startup path twice to confirm idempotence.",
+        "Exercise activate, block, reopen, passing, and WIP=1 behavior."
+      ],
+      "evidence": [
+        "template/core/",
+        "scripts/install_core.py",
+        "tests/test_core_profile.py::test_installer_dry_run_and_collision_safety",
+        "tests/test_core_profile.py::test_init_is_repeatable_and_cold_start_answers_are_complete",
+        "tests/test_core_profile.py::test_state_transitions_enforce_wip_and_preserve_receipts",
+        "tests/test_core_profile.py::test_state_drift_is_detected_and_repairable",
+        "./init.sh -> Core profile audit healthy and 8 fixture tests passing (2026-07-25)"
+      ],
+      "sources": [
+        "SRC-CH-003..008",
+        "SRC-RES-001",
+        "SRC-TPL-001..010",
+        "SRC-REF-001..006"
+      ],
+      "notes": "Python 3.10+ is the only Core runtime dependency; project commands execute without a shell."
+    },
+    {
+      "id": "HST-005",
+      "priority": 5,
+      "area": "verification",
+      "title": "Add layered completion and clean-state gates",
+      "behavior": "A feature cannot pass without the verification levels required by its risk and without a resumable clean state.",
+      "status": "passing",
+      "verification": [
+        "Exercise static, runtime, integration, and end-to-end gate selections in fixtures.",
+        "Confirm a failing required gate prevents passing.",
+        "Confirm actionable failure messages identify what, why, and how to fix.",
+        "Confirm a regression can demote a previously passing feature."
+      ],
+      "evidence": [
+        "template/core/scripts/harness.py",
+        "template/core/docs/VALIDATION.md",
+        "tests/test_core_profile.py::test_failing_required_gate_prevents_completion_with_actionable_error",
+        "tests/test_core_profile.py::test_clean_state_and_high_risk_gate",
+        "tests/test_core_profile.py::test_completion_cannot_downgrade_declared_risk",
+        "tests/test_core_profile.py::test_config_rejects_placeholders_and_disabled_profiles",
+        "./init.sh -> V0-V4, failure, clean-state, state-sync, and risk-downgrade fixtures passing (2026-07-25)"
+      ],
+      "sources": [
+        "SRC-CH-009..012",
+        "SRC-TPL-004..005",
+        "SRC-TPL-009",
+        "SRC-ADV-009..010",
+        "SRC-ADV-023",
+        "SRC-ADV-027"
+      ],
+      "notes": "Completion runs contiguous levels from V0 through the selected profile and records skipped levels."
+    },
+    {
+      "id": "HST-007",
+      "priority": 6,
+      "area": "core-hardening",
+      "title": "Harden verification, evidence freshness, installation, traceability, and release lifecycle",
+      "behavior": "A copied Core profile executes feature-specific verification, rejects stale evidence and unsafe install paths, resolves every learning source locally, bounds command execution, and supports versioned install, upgrade, and removal.",
+      "status": "passing",
+      "verification": [
+        "Bind every feature verification requirement to executable gates or commands and reject unbound requirements.",
+        "Reject passing receipts when receipt, configuration, verification, revision, or tracked file digests are stale or structurally incomplete.",
+        "Reject symbolic links in every existing target segment and any managed install path that resolves outside the target root.",
+        "Validate a 65-entry source disposition ledger and copy a self-contained source map with the Core profile.",
+        "Exercise timeout, cwd, bounded logs, missing executables, and representative generic, Python, and Node project fixtures.",
+        "Exercise versioned install, safe upgrade, dry-run removal, rollback, license, and notice contracts.",
+        "Run ./init.sh and confirm every dynamic fixture passes without temporary artifacts."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 30/30, live source traceability 65/65, Core self-audit, and 27 dynamic Fixture tests passing (2026-07-25)",
+        "tests/test_core_profile.py -> executable bindings, immutable WIP/receipt rules, schema-v2 receipt digest/structure, config/verification/tracked-file freshness, and real Git ancestor/divergence checks passing (2026-07-25)",
+        "tests/test_core_profile.py -> timeout with child process-group termination, inside/outside cwd, missing executable, bounded/redacted logs, POSIX, Python, and Node fixtures passing (2026-07-25)",
+        "tests/test_core_profile.py -> target/ancestor/descendant symlink refusal, real 0.1.0->0.1.1 replacement, downgrade/pre-1 minor refusal, replacement and partial-create failure rollback, dry-run removal, manual-merge acknowledgement, backup, and modified-file refusal passing (2026-07-25)",
+        "scripts/validate_harness.py -> 65-row inventory/disposition/source-map identity, decision/target parity, reverse component links, SemVer, LICENSE, and NOTICE validation passing (2026-07-25)"
+      ],
+      "sources": [
+        "SRC-CH-001..012",
+        "SRC-RES-001",
+        "SRC-TPL-001..010",
+        "SRC-REF-001..006",
+        "SRC-ADV-001..027",
+        "SRC-SKL-001",
+        "SRC-PRJ-001..007"
+      ],
+      "notes": "At HST-007 completion, POSIX shell and Python 3.10+ were the support boundary. HST-008 supersedes that boundary with a native Windows adapter while preserving the HST-007 evidence as historical proof."
+    },
+    {
+      "id": "HST-008",
+      "priority": 7,
+      "area": "windows-adapter",
+      "title": "Add a native Windows PowerShell and process-control adapter",
+      "behavior": "A copied Core profile initializes from PowerShell, resolves a supported Python launcher, executes portable built-in gates, and terminates timed-out process trees safely on native Windows without weakening POSIX behavior.",
+      "status": "passing",
+      "verification": [
+        "Install init.ps1 as a traced Core component and validate its launcher, PowerShell -Setup to Python --setup forwarding, working-directory, and exit-code contract.",
+        "Replace distribution-owned gate interpreter paths with a portable current-Python token while preserving shell-free argv execution.",
+        "Use Windows process-group creation and taskkill tree termination on nt while retaining POSIX session and signal behavior.",
+        "Exercise portable argv expansion, simulated Windows process options and termination fallback, path rejection, and PowerShell contract fixtures.",
+        "Document native Windows adoption, support boundaries, execution policy guidance, rollback, and the unverified-on-Windows limitation when no Windows runner is available.",
+        "Run ./init.sh and all existing POSIX, lifecycle, receipt, source, and representative-stack fixtures without regression."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 32/32, live source traceability 65/65, Core self-audit, and 37 dynamic Fixture tests discovered: 36 passed, 1 explicit non-Windows PowerShell test skipped (2026-07-25)",
+        "tests/test_core_profile.py -> PowerShell 5.1 launcher/setup/cwd/exit-code static contract passing; native adapter test is mandatory when PowerShell is present and explicitly skipped on this macOS host (2026-07-25)",
+        "tests/test_core_profile.py -> {python} argv[0] expansion/position rejection, schema-v3 runtime freshness, internal argv/tracked digest checks, and schema-v2 historical re-verification migration passing (2026-07-25)",
+        "tests/test_core_profile.py -> simulated nt creation flags, Windows quoting, CTRL_BREAK/taskkill/direct-kill order, actual POSIX child-group timeout, and bounded runner regressions passing (2026-07-25)",
+        "tests/test_core_profile.py -> symlink and simulated junction/reparse refusal, Windows case alias/reserved name/ADS/trailing segment rejection, and lifecycle rollback regressions passing (2026-07-25)",
+        "docs/source-disposition.md + Core source-map/components -> 65 disposition rows, declared broad-vs-direct link semantics, and HC-018 exact coverage passing (2026-07-25)"
+      ],
+      "sources": [
+        "SRC-CH-002",
+        "SRC-CH-006",
+        "SRC-CH-012",
+        "SRC-TPL-008",
+        "SRC-REF-001",
+        "SRC-REF-004",
+        "SRC-ADV-002",
+        "SRC-ADV-010"
+      ],
+      "notes": "This is a Core portability adapter, not part of optional HST-006 governance and observability. The current host has no pwsh/powershell, so native PowerShell parsing/execution, real taskkill, and a real Windows junction remain unexecuted locally. These checks are retained as future verification evidence when a Windows/PowerShell runner is available; they are not pending implementation or a Core 0.2.0 completion blocker."
+    },
+    {
+      "id": "HST-006",
+      "priority": 8,
+      "area": "advanced-profile",
+      "title": "Package optional advanced governance and observability modules",
+      "behavior": "Larger repositories can opt into plans, product specs, quality scoring, security, observability, and role separation without bloating the core profile.",
+      "status": "out_of_scope",
+      "verification": [
+        "Install each optional module independently in a fixture.",
+        "Confirm core startup remains valid when the module is absent.",
+        "Run an ablation benchmark and retain only modules with measurable value."
+      ],
+      "evidence": [],
+      "sources": [
+        "SRC-ADV-001..027",
+        "SRC-SKL-001",
+        "SRC-PRJ-005..007"
+      ],
+      "notes": "Intentionally out of scope for Core 0.2.0 by user decision on 2026-07-25. Reconsider only when a future release explicitly re-scopes an observed governance or observability bottleneck; this is not pending work for the current release."
+    }
+  ]
+}
