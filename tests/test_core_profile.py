@@ -14,13 +14,14 @@ import tempfile
 import time
 import unittest
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parent.parent
 INSTALLER = ROOT / "scripts/install_core.py"
+VALIDATOR = ROOT / "scripts/validate_harness.py"
 
 
 def gate_command(level: str, exit_code: int = 0) -> dict[str, object]:
@@ -365,6 +366,17 @@ class CoreProfileTest(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def load_validator_module(self, label: str) -> object:
+        spec = importlib.util.spec_from_file_location(
+            f"harness_validator_{label}",
+            VALIDATOR,
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
     def make_directory_symlink(self, source: Path, destination: Path) -> None:
         try:
             destination.symlink_to(source, target_is_directory=True)
@@ -507,6 +519,11 @@ class CoreProfileTest(unittest.TestCase):
                 with self.subTest(harness_unsafe=unsafe):
                     with self.assertRaises(harness_module.HarnessFailure):
                         harness_module.safe_repo_path(unsafe)
+            with self.assertRaisesRegex(
+                harness_module.HarnessFailure,
+                "escapes the root",
+            ):
+                harness_module.safe_repo_path("../outside")
 
     def test_versioned_install_upgrade_and_remove_lifecycle(self) -> None:
         target = self.base / "lifecycle-project"
@@ -1295,6 +1312,15 @@ class CoreProfileTest(unittest.TestCase):
         self.assertIn("[switch]$setup", core_text)
         self.assertIn('"--setup"', core_text)
         self.assertIn("scripts\\harness.py", core_text)
+
+    def test_root_validator_normalizes_windows_component_paths(self) -> None:
+        validator = self.load_validator_module("windows_component_paths")
+        root = PureWindowsPath(r"C:\fixture\template\core")
+        path = root / "docs" / "STATE.md"
+        self.assertEqual(
+            validator.portable_relative_path(path, root),
+            "docs/STATE.md",
+        )
 
     def test_native_powershell_adapter_when_runtime_is_available(self) -> None:
         powershell = shutil.which("pwsh") or shutil.which("powershell")

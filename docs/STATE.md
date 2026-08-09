@@ -83,14 +83,20 @@
 - 실제 외부 채택: `repos_hyeonbungi`의 독립 Git 프로젝트 두 곳에서 기존 제품
   파일 해시를 보존한 채 21개 Core 설치·설정·반복 init·BOOT-001 완료·감사·
   같은 버전 no-op을 검증하고, 두 프로젝트를 작업 위치에서 제거
-- 프로젝트 기준선: `./init.sh`에서 필수 산출물 36/36, 내장 원장
-  65/65 추적, Core 감사, 동적 Fixture 총 44개 중 43개 통과, 네이티브
-  PowerShell Fixture 1개는 현재 비-Windows 호스트에서 명시적 skip
+- 프로젝트 기준선: 네이티브 Windows에서 PowerShell 7.6.3과 Windows
+  PowerShell 5.1의 `init.ps1`로 각각 필수 산출물 36/36, 내장 원장 65/65 추적,
+  Core 감사, 동적 Fixture 총 45개 중 44개 통과, POSIX 전용 `sh` Fixture 1개
+  명시적 skip
 - 현재 프로젝트: 로컬 `main` Git 저장소와 공개 원격
   `https://github.com/hyeonbungi/harness-engineering-starter-lite`를 사용
 
 ## 이번 단계의 결정
 
+- `HST-008`을 네이티브 Windows에서 재검증해 완료했습니다. 루트 구성요소
+  경로는 플랫폼 독립 `/` 형식으로 정규화하고, 정확한 `..` 세그먼트는 공통
+  resolved-root 경계에서 거부해 플랫폼별 오류 계약을 통일했습니다. 독립 임시
+  Git 프로젝트에서 제품 파일 해시를 보존한 21개 Core 설치·설정·반복 init·
+  BOOT-001 완료·같은 버전 no-op까지 확인했습니다.
 - `HST-015`를 완료했습니다. 실제 외부 Git 프로젝트의 설치·설정·완료로 제품
   파일 보존과 독립 실행을 확인했고, 같은 버전 무변경 upgrade가 남기던
   manifest-only 백업과 timestamp 쓰기를 제거했습니다. 실제 파일 또는 원장
@@ -127,11 +133,10 @@
   않았습니다. 템플릿은 수치가 아니라 반복되는 운영 원칙을 채택합니다.
 - Core 실행기는 두 운영체제 모두 Python 3.10+를 요구합니다. Python 자체가
   없는 환경의 자동 설치는 범위 밖입니다.
-- 현재 macOS 호스트에는 `pwsh`/`powershell`이 없어 PowerShell 5.1 파싱·실행,
-  실제 Windows `taskkill`, 실제 junction 경계를 실행하지 못했습니다.
-  정적·모의 검증과 Windows에서 자동 실행되는 조건부 Fixture는 준비됐지만,
-  네이티브 Windows 통과 결과는 환경이 마련될 때 추가할 향후 검증 증거로만
-  남깁니다. 이는 현재 구현 미완료나 `0.3.0` 릴리스 차단을 뜻하지 않습니다.
+- 네이티브 Windows에서 PowerShell 7.6.3과 Windows PowerShell 5.1의 루트·
+  설치본 init, 자식 프로세스 timeout과 대표 채택 흐름을 실행했습니다. 실제
+  junction 생성은 수행하지 않았고, reparse attribute와 거부 동작은 결정적
+  Fixture로 검증합니다.
 - 모든 Windows reparse point를 보수적으로 거부하므로 provider-managed
   mount에서 오탐할 수 있습니다. UNC·네트워크 파일시스템 원자성도 자동
   보장 범위가 아닙니다.
@@ -157,5 +162,3 @@
 
 - 필수 active 기능은 없습니다. 다음 사용자 목표가 생기면 우선순위가 가장 높은
   기능 하나만 엽니다.
-- 네이티브 Windows 실행 결과는 Windows/PowerShell 환경이 생길 때 추가할
-  향후 검증 증거이며, 현재 완료 상태를 열어 두지 않습니다.

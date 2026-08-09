@@ -10,7 +10,7 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -56,6 +56,10 @@ REQUIRED_FILES = (
 
 def fail(message: str) -> None:
     raise SystemExit(f"ERROR: {message}")
+
+
+def portable_relative_path(path: PurePath, root: PurePath) -> str:
+    return path.relative_to(root).as_posix()
 
 
 def validate_required_files() -> None:
@@ -372,7 +376,7 @@ def validate_core_profile(source_ids: set[str]) -> None:
         )
 
     distributable_paths = {
-        str(path.relative_to(core))
+        portable_relative_path(path, core)
         for path in core.rglob("*")
         if path.is_file()
     }

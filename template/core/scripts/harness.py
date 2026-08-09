@@ -329,7 +329,9 @@ def safe_repo_path(relative: str) -> Path:
         for part in re.split(r"[\\/]", relative):
             if not part or part == ".":
                 continue
-            if ":" in part or part.endswith((" ", ".")):
+            if ":" in part or (
+                part != ".." and part.endswith((" ", "."))
+            ):
                 raise HarnessFailure(
                     f"unsafe Windows repository path segment: {part!r}"
                 )

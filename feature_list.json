@@ -212,12 +212,11 @@
         "Run ./init.sh and all existing POSIX, lifecycle, receipt, source, and representative-stack fixtures without regression."
       ],
       "evidence": [
-        "./init.sh -> required artifacts 32/32, live source traceability 65/65, Core self-audit, and 37 dynamic Fixture tests discovered: 36 passed, 1 explicit non-Windows PowerShell test skipped (2026-07-25)",
-        "tests/test_core_profile.py -> PowerShell 5.1 launcher/setup/cwd/exit-code static contract passing; native adapter test is mandatory when PowerShell is present and explicitly skipped on this macOS host (2026-07-25)",
-        "tests/test_core_profile.py -> {python} argv[0] expansion/position rejection, schema-v3 runtime freshness, internal argv/tracked digest checks, and schema-v2 historical re-verification migration passing (2026-07-25)",
-        "tests/test_core_profile.py -> simulated nt creation flags, Windows quoting, CTRL_BREAK/taskkill/direct-kill order, actual POSIX child-group timeout, and bounded runner regressions passing (2026-07-25)",
-        "tests/test_core_profile.py -> symlink and simulated junction/reparse refusal, Windows case alias/reserved name/ADS/trailing segment rejection, and lifecycle rollback regressions passing (2026-07-25)",
-        "docs/source-disposition.md + Core source-map/components -> 65 disposition rows, declared broad-vs-direct link semantics, and HC-018 exact coverage passing (2026-07-25)"
+        "pwsh 7.6.3 .\\init.ps1 and Windows PowerShell 5.1 .\\init.ps1 -> required artifacts 36/36, embedded-ledger source traceability 65/65, Core self-audit, and 45 dynamic Fixture tests discovered: 44 passed, 1 expected POSIX-only sh Fixture skipped in each run (2026-08-09)",
+        "tests/test_core_profile.py::test_root_validator_normalizes_windows_component_paths + test_runner_rejects_cwd_outside_the_project -> component paths use portable forward slashes and both Windows/POSIX reject repository escape with the same actionable contract (2026-08-09)",
+        "Native temporary Git project hesl-windows-adoption-audit-20260809 -> 21-file install, configured Python product, pwsh and Windows PowerShell setup/repeat init, cold-start, start, audit, BOOT-001 schema-v4 completion, and clean Git handoff all passed (2026-08-09)",
+        "Temporary adoption product SHA-256 values remained unchanged across Core adoption; same-version upgrade preserved five local customizations with an identical manifest hash, zero backups before/after, and no Git changes (2026-08-09)",
+        "Windows Fixture suite -> native PowerShell adapter, child-process timeout, Python and Node representative stacks, lifecycle rollback, path alias/reparse guards, quoting, and taskkill fallback contract passed without POSIX behavior changes (2026-08-09)"
       ],
       "sources": [
         "SRC-CH-002",
@@ -229,7 +228,7 @@
         "SRC-ADV-002",
         "SRC-ADV-010"
       ],
-      "notes": "This is a Core portability adapter, not part of optional HST-006 governance and observability. The current host has no pwsh/powershell, so native PowerShell parsing/execution, real taskkill, and a real Windows junction remain unexecuted locally. These checks are retained as future verification evidence when a Windows/PowerShell runner is available; they are not pending implementation or a current Core completion blocker."
+      "notes": "Reverified on native Windows on 2026-08-09. The root validator now normalizes component paths with PurePath.as_posix(), and exact '..' segments reach the common resolved-root boundary so escape rejection and diagnostics remain platform-consistent without weakening reserved-name, ADS, trailing-dot/space, reparse-point, or process-control protections. A real Windows junction remains a conservative runtime boundary; attributes and refusal behavior are covered by deterministic Fixtures."
     },
     {
       "id": "HST-006",
