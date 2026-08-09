@@ -58,22 +58,24 @@
         }
       ],
       "tracked_files": [
+        ".agents/skills/audit-harness-health/SKILL.md",
+        ".claude/skills/audit-harness-health/SKILL.md",
         "AGENTS.md",
         "CLAUDE.md",
         "LICENSE",
         "NOTICE",
         "VERSION",
         "docs/ARCHITECTURE.md",
+        "docs/COMMUNICATION.md",
         "docs/VALIDATION.md",
         "docs/harness/ADOPTION.md",
         "docs/harness/LIFECYCLE.md",
         "docs/harness/SOURCES.md",
         "docs/harness/components.json",
         "docs/harness/source-map.json",
-    "harness.config.json",
-    "init.sh",
-    "init.ps1",
-    "scripts/harness.py"
+        "init.sh",
+        "init.ps1",
+        "scripts/harness.py"
       ],
       "evidence": [],
       "history": [],

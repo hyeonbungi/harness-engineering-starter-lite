@@ -602,6 +602,72 @@ class CoreProfileTest(unittest.TestCase):
         self.assertFalse(manifest_path.exists())
         self.assertTrue(any((target / ".harness/backups").iterdir()))
 
+    def test_same_version_noop_upgrade_does_not_write(self) -> None:
+        target = self.base / "same-version-noop-project"
+        installed = subprocess.run(
+            [sys.executable, str(INSTALLER), str(target)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(installed.returncode, 0, installed.stdout + installed.stderr)
+
+        config_path = target / "harness.config.json"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        manifest_path = target / ".harness/install-manifest.json"
+        manifest_before = manifest_path.read_bytes()
+        file_digests_before = {
+            path.relative_to(target).as_posix(): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+            for path in target.rglob("*")
+            if path.is_file()
+        }
+
+        preview = subprocess.run(
+            [
+                sys.executable,
+                str(INSTALLER),
+                str(target),
+                "--upgrade",
+                "--dry-run",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+        self.assertIn("No managed file changes", preview.stdout)
+        self.assertEqual(manifest_path.read_bytes(), manifest_before)
+
+        upgraded = subprocess.run(
+            [sys.executable, str(INSTALLER), str(target), "--upgrade"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(upgraded.returncode, 0, upgraded.stdout + upgraded.stderr)
+        self.assertIn("Core is already current", upgraded.stdout)
+        self.assertNotIn("backup:", upgraded.stdout)
+        self.assertFalse((target / ".harness/backups").exists())
+        self.assertEqual(manifest_path.read_bytes(), manifest_before)
+        self.assertEqual(
+            {
+                path.relative_to(target).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in target.rglob("*")
+                if path.is_file()
+            },
+            file_digests_before,
+        )
+
     def test_remove_refuses_locally_modified_managed_files(self) -> None:
         result = subprocess.run(
             [sys.executable, str(INSTALLER), str(self.target), "--remove"],
@@ -932,6 +998,271 @@ class CoreProfileTest(unittest.TestCase):
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("@AGENTS.md", rejected.stderr)
 
+    def test_resident_agent_communication_contract_is_installed_and_routed(self) -> None:
+        for root in (ROOT / "template/core", self.target):
+            agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+            contract = (root / "docs/COMMUNICATION.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("docs/COMMUNICATION.md", agents)
+            for required in (
+                "항상 한국어",
+                "존댓말",
+                "컴퓨터공학과 대학생",
+                "결론과 현재 상태",
+                "사실·추론·제안",
+            ):
+                self.assertIn(required, agents)
+            for required in (
+                "시각적 보고",
+                "완료 증거",
+                "안전과 권한",
+                "최종 응답 전 자기점검",
+                "종료되는 자기개선 루프",
+                "상시 자기개선 권한",
+                "별도 사용자 명령 없이도",
+            ):
+                self.assertIn(required, contract)
+
+        components = json.loads(
+            (self.target / "docs/harness/components.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        communication = next(
+            component
+            for component in components["components"]
+            if component["id"] == "HC-019"
+        )
+        self.assertEqual(communication["path"], "docs/COMMUNICATION.md")
+
+    def test_autonomous_structural_self_improvement_contract_is_enforced(self) -> None:
+        marker = "<!-- harness:auto-improvement:v1 -->"
+        for root in (ROOT / "template/core", self.target):
+            agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+            contract = (root / "docs/COMMUNICATION.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(marker, agents)
+            self.assertIn(marker, contract)
+            for required in (
+                "별도 사용자 명령 없이도",
+                "변경 금지·중지",
+                "BOOT-001",
+                "최대 한 번",
+            ):
+                self.assertIn(required, agents)
+            for required in (
+                "상시 자기개선 권한",
+                "답변·진단·제안 중 발견해도",
+                "제품 기능·데이터",
+                "최대 한 번",
+                "호스트의 상위 정책",
+                "최종 응답 직전에 발동 조건",
+            ):
+                self.assertIn(required, contract)
+            self.assertNotIn(
+                "답변·진단·제안 요청에서는 문제와 최소 수정안만 보고",
+                contract,
+            )
+
+        root_agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("별도 명령 없이도", root_agents)
+
+        for relative in ("AGENTS.md", "docs/COMMUNICATION.md"):
+            path = self.target / relative
+            original = path.read_text(encoding="utf-8")
+            path.write_text(original.replace(marker, "", 1), encoding="utf-8")
+            rejected = self.run_cli("audit")
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("autonomous self-improvement contract drifted", rejected.stderr)
+            path.write_text(original, encoding="utf-8")
+
+        for relative, clause in (
+            ("AGENTS.md", "최종 응답 직전에"),
+            ("docs/COMMUNICATION.md", "답변·진단·제안 중 발견해도"),
+            ("docs/COMMUNICATION.md", "제품 기능·데이터"),
+        ):
+            path = self.target / relative
+            original = path.read_text(encoding="utf-8")
+            path.write_text(original.replace(clause, "", 1), encoding="utf-8")
+            rejected = self.run_cli("audit")
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("autonomous self-improvement contract drifted", rejected.stderr)
+            path.write_text(original, encoding="utf-8")
+
+        self.assertEqual(self.run_cli("audit").returncode, 0)
+
+    def test_callable_harness_audit_skill_is_installed_and_routed(self) -> None:
+        canonical_relative = ".agents/skills/audit-harness-health/SKILL.md"
+        bridge_relatives = (
+            ".claude/skills/audit-harness-health/SKILL.md",
+        )
+        target = "../../../.agents/skills/audit-harness-health/SKILL.md"
+
+        def frontmatter_value(text: str, key: str) -> str:
+            prefix = f"{key}:"
+            return next(
+                line.split(":", 1)[1].strip()
+                for line in text.splitlines()
+                if line.startswith(prefix)
+            )
+
+        for root in (ROOT / "template/core", self.target):
+            self.assertFalse(
+                (root / ".codex/skills/audit-harness-health/SKILL.md").exists()
+            )
+            canonical_path = root / canonical_relative
+            canonical = canonical_path.read_text(encoding="utf-8")
+            agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("$audit-harness-health", agents)
+            self.assertIn("감사 중에는 자동 개선을 수행하지 않고", agents)
+            self.assertIn("<!-- harness:audit-skill:v1 -->", canonical)
+            self.assertIn("읽기 전용", canonical)
+            self.assertIn("python3 scripts/harness.py audit", canonical)
+            self.assertIn("빠른 감사", canonical)
+            self.assertIn("집중 감사", canonical)
+            self.assertIn("깊은 감사", canonical)
+            self.assertIn("git status --short", canonical)
+            self.assertIn("일반 코드 리뷰", canonical)
+            self.assertIn("작은 수정", canonical)
+            canonical_description = frontmatter_value(canonical, "description")
+
+            for relative in bridge_relatives:
+                path = root / relative
+                bridge = path.read_text(encoding="utf-8")
+                self.assertIn("<!-- harness:skill-bridge:v1 -->", bridge)
+                self.assertIn(target, bridge)
+                self.assertIn("처음부터 끝까지 읽고", bridge)
+                self.assertNotIn("<!-- harness:audit-skill:v1 -->", bridge)
+                self.assertNotIn("## 핵심 계약", bridge)
+                self.assertLess(path.stat().st_size, 2 * 1024)
+                self.assertLess(path.stat().st_size, canonical_path.stat().st_size)
+                self.assertEqual(
+                    frontmatter_value(bridge, "description"),
+                    canonical_description,
+                )
+                self.assertEqual(
+                    (path.parent / target).resolve(),
+                    canonical_path.resolve(),
+                )
+
+        manifest = json.loads(
+            (self.target / ".harness/install-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        managed = {entry["path"] for entry in manifest["files"]}
+        self.assertIn(canonical_relative, managed)
+        self.assertTrue(set(bridge_relatives).issubset(managed))
+
+        def snapshot() -> dict[str, str]:
+            return {
+                path.relative_to(self.target).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in self.target.rglob("*")
+                if path.is_file()
+            }
+
+        before = snapshot()
+        healthy = self.run_cli("audit")
+        self.assertEqual(healthy.returncode, 0, healthy.stdout + healthy.stderr)
+        self.assertEqual(snapshot(), before)
+
+        drift_cases = (
+            (canonical_relative, "<!-- harness:audit-skill:v1 -->", ""),
+            (bridge_relatives[0], target, "../../../.broken/SKILL.md"),
+            (bridge_relatives[0], "description:", "description: drifted "),
+        )
+        for relative, old, new in drift_cases:
+            path = self.target / relative
+            original = path.read_text(encoding="utf-8")
+            path.write_text(original.replace(old, new, 1), encoding="utf-8")
+            rejected = self.run_cli("audit")
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("audit Skill", rejected.stderr)
+            path.write_text(original, encoding="utf-8")
+
+        self.assertEqual(self.run_cli("audit").returncode, 0)
+
+    def test_startup_context_and_operational_history_are_bounded(self) -> None:
+        agents = (self.target / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("cold-start --json", agents)
+        self.assertIn("전체 기능·Source·영수증 원장을 읽는 대신", agents)
+        self.assertIn("집중 검사를 우선", agents)
+
+        harness = self.load_harness_module("bounded_context")
+        self.assertEqual(
+            harness.STARTUP_CONTEXT_LIMITS,
+            {
+                "AGENTS.md": 8 * 1024,
+                "CLAUDE.md": 4 * 1024,
+                "docs/COMMUNICATION.md": 16 * 1024,
+                "docs/STATE.md": 16 * 1024,
+            },
+        )
+
+        agents_path = self.target / "AGENTS.md"
+        original_agents = agents_path.read_text(encoding="utf-8")
+        agents_path.write_text(
+            original_agents + "\n" + "x" * (8 * 1024),
+            encoding="utf-8",
+        )
+        oversized = self.run_cli("audit")
+        self.assertNotEqual(oversized.returncode, 0)
+        self.assertIn("startup context limit", oversized.stderr)
+        self.assertIn("do not raise the limit", oversized.stderr)
+        agents_path.write_text(original_agents, encoding="utf-8")
+
+        feature = {"history": [], "evidence": []}
+        for index in range(harness.MAX_FEATURE_HISTORY_EVENTS + 3):
+            harness.append_bounded_feature_entry(
+                feature,
+                "history",
+                {"index": index},
+                harness.MAX_FEATURE_HISTORY_EVENTS,
+            )
+        for index in range(harness.MAX_FEATURE_EVIDENCE_REFERENCES + 3):
+            harness.append_bounded_feature_entry(
+                feature,
+                "evidence",
+                {"index": index},
+                harness.MAX_FEATURE_EVIDENCE_REFERENCES,
+            )
+        self.assertEqual(len(feature["history"]), 20)
+        self.assertEqual(feature["history"][0]["index"], 3)
+        self.assertEqual(len(feature["evidence"]), 5)
+        self.assertEqual(feature["evidence"][0]["index"], 3)
+
+        feature_path = self.target / "feature_list.json"
+        original_features = feature_path.read_text(encoding="utf-8")
+        features = json.loads(original_features)
+        features["features"][1]["history"] = [
+            {"index": index}
+            for index in range(harness.MAX_FEATURE_HISTORY_EVENTS + 1)
+        ]
+        feature_path.write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        accumulated = self.run_cli("audit")
+        self.assertNotEqual(accumulated.returncode, 0)
+        self.assertIn("operational window is 20", accumulated.stderr)
+
+        features = json.loads(original_features)
+        features["features"][1]["evidence"] = [
+            {"index": index}
+            for index in range(harness.MAX_FEATURE_EVIDENCE_REFERENCES + 1)
+        ]
+        feature_path.write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        accumulated = self.run_cli("audit")
+        self.assertNotEqual(accumulated.returncode, 0)
+        self.assertIn("operational window is 5", accumulated.stderr)
+
     def test_powershell_adapters_have_a_safe_static_contract(self) -> None:
         for path in (ROOT / "init.ps1", ROOT / "template/core/init.ps1"):
             raw = path.read_bytes()
@@ -1034,9 +1365,24 @@ class CoreProfileTest(unittest.TestCase):
         self.assertIn(("V1", "core-init-first"), executed_ids)
         self.assertIn(("V1", "core-init-repeat"), executed_ids)
         self.assertIn(("V1", "core-cold-start"), executed_ids)
-        self.assertEqual(len(receipt["tracked_files"]), 16)
+        self.assertEqual(
+            [entry["path"] for entry in receipt["tracked_files"]],
+            sorted(feature["tracked_files"]),
+        )
         self.assertEqual(len(receipt["tracked_files_sha256"]), 64)
-        self.assertEqual(receipt["schema_version"], 3)
+        self.assertEqual(receipt["schema_version"], 4)
+        current_config = json.loads(
+            (self.target / "harness.config.json").read_text(encoding="utf-8")
+        )
+        expected_config_sha256 = hashlib.sha256(
+            json.dumps(
+                current_config,
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(receipt["config_sha256"], expected_config_sha256)
+        self.assertEqual(len(receipt["execution_config_sha256"]), 64)
         self.assertEqual(receipt["runtime"]["platform"], sys.platform)
         self.assertEqual(len(receipt["runtime"]["sha256"]), 64)
         core_init_record = next(
@@ -1097,6 +1443,16 @@ class CoreProfileTest(unittest.TestCase):
         self.assertNotEqual(weak.returncode, 0)
         self.assertIn("outside risk profile", weak.stderr)
 
+        features = json.loads(original)
+        features["features"][0]["tracked_files"].append("harness.config.json")
+        path.write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        tracked_config = self.run_cli("audit")
+        self.assertNotEqual(tracked_config.returncode, 0)
+        self.assertIn("cannot track mutable state", tracked_config.stderr)
+
     def test_wip_receipt_and_receipt_schema_invariants_cannot_be_weakened(self) -> None:
         path = self.target / "feature_list.json"
         original = path.read_text(encoding="utf-8")
@@ -1143,7 +1499,7 @@ class CoreProfileTest(unittest.TestCase):
         )
         invalid_schema = self.run_cli("audit")
         self.assertNotEqual(invalid_schema.returncode, 0)
-        self.assertIn("schema_version 3", invalid_schema.stderr)
+        self.assertIn("schema_version 4", invalid_schema.stderr)
 
     def test_receipt_freshness_detects_config_verification_and_file_changes(self) -> None:
         self.assertEqual(
@@ -1201,6 +1557,82 @@ class CoreProfileTest(unittest.TestCase):
         )
         self.assertEqual(reopen.returncode, 0, reopen.stdout + reopen.stderr)
         self.assertEqual(self.feature("BOOT-001")["status"], "active")
+
+    def test_receipt_freshness_ignores_unexecuted_config_changes(self) -> None:
+        self.assertEqual(
+            self.run_cli("state", "activate", "BOOT-001").returncode,
+            0,
+        )
+        complete = self.run_cli("complete", "BOOT-001", "--risk", "local_code")
+        self.assertEqual(complete.returncode, 0, complete.stdout + complete.stderr)
+
+        config_path = self.target / "harness.config.json"
+        original_config = config_path.read_text(encoding="utf-8")
+        config = json.loads(original_config)
+        config["gates"]["V4"]["commands"][0]["why"] = (
+            "An unexecuted V4 explanation changed after local-code completion."
+        )
+        config["risk_profiles"]["high_risk"]["description"] = (
+            "An unrelated high-risk profile description changed."
+        )
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        still_current = self.run_cli("audit")
+        self.assertEqual(
+            still_current.returncode,
+            0,
+            still_current.stdout + still_current.stderr,
+        )
+        evidence = self.feature("BOOT-001")["evidence"][-1]
+        receipt = json.loads(
+            (self.target / evidence["receipt"]).read_text(encoding="utf-8")
+        )
+        current_full_digest = hashlib.sha256(
+            json.dumps(
+                config,
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertNotEqual(receipt["config_sha256"], current_full_digest)
+        harness_module = self.load_harness_module("execution_config_digest")
+        self.assertEqual(
+            receipt["execution_config_sha256"],
+            harness_module.execution_config_digest(
+                config,
+                "local_code",
+                ["V0", "V1"],
+            ),
+        )
+
+        original = json.loads(original_config)
+        config["gates"]["V1"]["commands"][0]["why"] = (
+            "An executed V1 contract changed after completion."
+        )
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        stale = self.run_cli("audit")
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertIn("executed configuration contract changed", stale.stderr)
+
+        config["gates"]["V1"] = original["gates"]["V1"]
+        config["risk_profiles"]["local_code"]["description"] = (
+            "The selected local-code profile changed after completion."
+        )
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        stale_profile = self.run_cli("audit")
+        self.assertNotEqual(stale_profile.returncode, 0)
+        self.assertIn(
+            "executed configuration contract changed",
+            stale_profile.stderr,
+        )
 
     def test_receipt_freshness_rejects_another_platform_runtime(self) -> None:
         self.assertEqual(
@@ -1276,7 +1708,7 @@ class CoreProfileTest(unittest.TestCase):
         self.assertNotEqual(invalid.returncode, 0)
         self.assertIn("argv digest does not match", invalid.stderr)
 
-    def test_historical_schema_two_receipt_can_be_preserved_after_reverification(
+    def test_historical_schema_two_and_three_receipts_survive_reverification(
         self,
     ) -> None:
         self.assertEqual(
@@ -1293,6 +1725,7 @@ class CoreProfileTest(unittest.TestCase):
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
         receipt["schema_version"] = 2
         receipt.pop("runtime")
+        receipt.pop("execution_config_sha256")
         built_in = next(
             record
             for record in receipt["executed"]
@@ -1319,7 +1752,7 @@ class CoreProfileTest(unittest.TestCase):
             "reopen",
             "BOOT-001",
             "--reason",
-            "Migrate historical evidence to schema v3.",
+            "Migrate historical schema-v2 evidence to schema v4.",
         )
         self.assertEqual(reopen.returncode, 0, reopen.stdout + reopen.stderr)
         recomplete = self.run_cli(
@@ -1333,14 +1766,71 @@ class CoreProfileTest(unittest.TestCase):
             0,
             recomplete.stdout + recomplete.stderr,
         )
+        current_features = self.read_features()
+        current = current_features["features"][0]
+        second_evidence = current["evidence"][-1]
+        second_receipt_path = self.target / second_evidence["receipt"]
+        second_receipt = json.loads(
+            second_receipt_path.read_text(encoding="utf-8")
+        )
+        second_receipt["schema_version"] = 3
+        second_receipt.pop("execution_config_sha256")
+        second_receipt_path.write_text(
+            json.dumps(second_receipt, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        second_evidence["receipt_sha256"] = hashlib.sha256(
+            second_receipt_path.read_bytes()
+        ).hexdigest()
+        features_path.write_text(
+            json.dumps(current_features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        stale_three = self.run_cli("audit")
+        self.assertNotEqual(stale_three.returncode, 0)
+        self.assertIn("historical receipt schema", stale_three.stderr)
+        reopen_three = self.run_cli(
+            "state",
+            "reopen",
+            "BOOT-001",
+            "--reason",
+            "Migrate historical schema-v3 evidence to schema v4.",
+        )
+        self.assertEqual(
+            reopen_three.returncode,
+            0,
+            reopen_three.stdout + reopen_three.stderr,
+        )
+        recomplete_three = self.run_cli(
+            "complete",
+            "BOOT-001",
+            "--risk",
+            "local_code",
+        )
+        self.assertEqual(
+            recomplete_three.returncode,
+            0,
+            recomplete_three.stdout + recomplete_three.stderr,
+        )
+
         current = self.feature("BOOT-001")
-        self.assertEqual(len(current["evidence"]), 2)
+        self.assertEqual(len(current["evidence"]), 3)
+        receipt_schemas = [
+            json.loads(
+                (self.target / evidence["receipt"]).read_text(
+                    encoding="utf-8"
+                )
+            )["schema_version"]
+            for evidence in current["evidence"]
+        ]
+        self.assertEqual(receipt_schemas, [2, 3, 4])
         newest = json.loads(
             (self.target / current["evidence"][-1]["receipt"]).read_text(
                 encoding="utf-8"
             )
         )
-        self.assertEqual(newest["schema_version"], 3)
+        self.assertEqual(newest["schema_version"], 4)
         healthy = self.run_cli("audit")
         self.assertEqual(healthy.returncode, 0, healthy.stdout + healthy.stderr)
 

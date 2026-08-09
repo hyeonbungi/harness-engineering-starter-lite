@@ -5,7 +5,7 @@
       "id": "HC-001",
       "path": "AGENTS.md",
       "profile": "core",
-      "purpose": "Short request, startup, work, completion, and handoff router.",
+      "purpose": "Short progressive request, startup, autonomous structural-improvement, work, completion, and handoff router.",
       "applies_when": "Always.",
       "sources": [
         "SRC-CH-003",
@@ -15,7 +15,7 @@
         "SRC-ADV-003"
       ],
       "validation": ["python3 scripts/harness.py audit"],
-      "review_trigger": "The router duplicates topic documents or becomes difficult to scan.",
+      "review_trigger": "The router duplicates topic documents, exceeds its context budget, or loads unrelated ledgers at startup.",
       "rollback": "Restore the previous validated router revision."
     },
     {
@@ -38,7 +38,7 @@
       "id": "HC-003",
       "path": "feature_list.json",
       "profile": "core",
-      "purpose": "Machine truth for WIP, status, verification, evidence, and history.",
+      "purpose": "Machine truth for WIP, status, verification, and bounded operational evidence and history.",
       "applies_when": "Always.",
       "sources": [
         "SRC-CH-007",
@@ -46,7 +46,7 @@
         "SRC-TPL-006"
       ],
       "validation": ["python3 scripts/harness.py audit"],
-      "review_trigger": "A state transition cannot represent current project truth.",
+      "review_trigger": "A state transition cannot represent current truth or evidence/history grows beyond its bounded window.",
       "rollback": "Restore the last receipt-backed feature state."
     },
     {
@@ -69,20 +69,21 @@
       "id": "HC-005",
       "path": "scripts/harness.py",
       "profile": "core",
-      "purpose": "Audit, state transitions, gate execution, receipts, and cold-start answers.",
+      "purpose": "Audit, bounded state transitions, gate execution, execution-scoped receipt freshness, startup-context limits, and cold-start answers.",
       "applies_when": "Always.",
       "sources": [
         "SRC-CH-006",
         "SRC-CH-008..012",
         "SRC-TPL-004",
         "SRC-REF-001",
-        "SRC-REF-004"
+        "SRC-REF-004",
+        "SRC-ADV-024"
       ],
       "validation": [
         "./init.sh",
         "powershell.exe -NoProfile -File .\\init.ps1"
       ],
-      "review_trigger": "A false pass, unsafe command path, or non-actionable error appears.",
+      "review_trigger": "A false pass, false stale result, unbounded operational context, unsafe command path, or non-actionable error appears.",
       "rollback": "Restore the previous script and validate existing receipts."
     },
     {
@@ -261,6 +262,50 @@
       ],
       "review_trigger": "PowerShell launcher discovery, argument forwarding, working-directory, exit-code, or native Windows support behavior changes.",
       "rollback": "Restore the previous validated PowerShell wrapper and rerun its launcher, setup, working-directory, and exit-code contract fixtures."
+    },
+    {
+      "id": "HC-019",
+      "path": "docs/COMMUNICATION.md",
+      "profile": "core",
+      "purpose": "Define concise Korean honorific communication, accessible explanations, evidence boundaries, useful visual reporting, response self-review, and one bounded autonomous structural-improvement loop.",
+      "applies_when": "Whenever a resident agent communicates with the user or reports work.",
+      "sources": [
+        "SRC-CH-004..005",
+        "SRC-CH-007",
+        "SRC-CH-012",
+        "SRC-TPL-001",
+        "SRC-ADV-024"
+      ],
+      "validation": ["python3 scripts/harness.py audit", "./init.sh"],
+      "review_trigger": "Users repeatedly report unclear responses or a resident agent fails to identify, execute, bound, or terminate an eligible structural improvement.",
+      "rollback": "Remove this component and restore the previous AGENTS.md communication summary and matching manifest."
+    },
+    {
+      "id": "HC-020",
+      "path": ".agents/skills/audit-harness-health/SKILL.md",
+      "profile": "core",
+      "purpose": "Provide one bounded, on-demand, read-only workflow for auditing resident-agent, harness, loop, state, evidence, skill, and lifecycle drift.",
+      "applies_when": "On explicit harness-health audit requests, repeated structural failures, or before major agent, runtime, migration, or release changes; Codex and shared Agent Skills clients discover this canonical path directly.",
+      "sources": [
+        "SRC-CH-004..005",
+        "SRC-CH-007..012",
+        "SRC-TPL-001",
+        "SRC-ADV-024"
+      ],
+      "validation": ["python3 scripts/harness.py audit", "./init.sh"],
+      "review_trigger": "The Skill misses recurring Core drift, becomes mutating or unbounded, triggers on routine product work, or duplicates the existing validator.",
+      "rollback": "Remove the canonical Skill and Claude pointer together, then restore the prior component ledger and tracked-file set."
+    },
+    {
+      "id": "HC-021",
+      "path": ".claude/skills/audit-harness-health/SKILL.md",
+      "profile": "core",
+      "purpose": "Expose the canonical audit Skill through Claude Code discovery without copying its workflow.",
+      "applies_when": "When Claude Code discovers project-local skills from .claude/skills.",
+      "sources": ["SRC-CH-004", "SRC-TPL-002"],
+      "validation": ["python3 scripts/harness.py audit"],
+      "review_trigger": "Claude discovery changes, the pointer no longer resolves, or Claude-specific audit rules begin accumulating in the bridge.",
+      "rollback": "Remove only this pointer and keep the canonical Skill available to Codex."
     }
   ]
 }

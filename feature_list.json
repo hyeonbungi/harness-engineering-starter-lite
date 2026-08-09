@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "harness-engineering-starter-lite",
-  "last_updated": "2026-07-25",
+  "last_updated": "2026-08-09",
   "rules": {
     "max_active_features": 1,
     "passing_requires_evidence": true,
@@ -229,7 +229,7 @@
         "SRC-ADV-002",
         "SRC-ADV-010"
       ],
-      "notes": "This is a Core portability adapter, not part of optional HST-006 governance and observability. The current host has no pwsh/powershell, so native PowerShell parsing/execution, real taskkill, and a real Windows junction remain unexecuted locally. These checks are retained as future verification evidence when a Windows/PowerShell runner is available; they are not pending implementation or a Core 0.2.x completion blocker."
+      "notes": "This is a Core portability adapter, not part of optional HST-006 governance and observability. The current host has no pwsh/powershell, so native PowerShell parsing/execution, real taskkill, and a real Windows junction remain unexecuted locally. These checks are retained as future verification evidence when a Windows/PowerShell runner is available; they are not pending implementation or a current Core completion blocker."
     },
     {
       "id": "HST-006",
@@ -249,7 +249,7 @@
         "SRC-SKL-001",
         "SRC-PRJ-005..007"
       ],
-      "notes": "Intentionally out of scope for the Core 0.2.x release line, including 0.2.1, by user decision on 2026-07-25. Reconsider only when a future release explicitly re-scopes an observed governance or observability bottleneck; this is not pending work for the current release."
+      "notes": "Intentionally out of scope by user decision on 2026-07-25 and not re-scoped for Core 0.3.0. Reconsider only when a future release explicitly re-scopes an observed governance or observability bottleneck; this is not pending work for the current release."
     },
     {
       "id": "HST-009",
@@ -276,6 +276,168 @@
         "SRC-TPL-002"
       ],
       "notes": "Completed by explicit user decision on 2026-07-25; AGENTS.md remains the single source of shared agent instructions and Claude-only notes may follow the import when a concrete need appears."
+    },
+    {
+      "id": "HST-010",
+      "priority": 10,
+      "area": "evidence-freshness",
+      "title": "Scope receipt configuration freshness to the executed contract",
+      "behavior": "A passing receipt remains current when only unselected gates or unrelated risk profiles change, while changes to the executed levels, runner, shared control plane, feature verification, tracked files, revision, or runtime still make it stale.",
+      "status": "passing",
+      "verification": [
+        "Write schema-v4 receipts with both a full configuration provenance digest and an executed-contract freshness digest.",
+        "Prove that changing an unselected gate or unrelated risk profile does not stale a local-code receipt.",
+        "Prove that changing an executed gate, runner setting, shared control-plane setting, feature verification, tracked file, revision, or runtime still makes evidence stale.",
+        "Preserve schema-v2 and schema-v3 receipts as historical evidence after schema-v4 re-verification.",
+        "Run ./init.sh and all lifecycle, platform, source-traceability, and representative-stack fixtures without regression."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 33/33, embedded-ledger source traceability 65/65, Core self-audit, and 39 dynamic Fixture tests discovered: 38 passed, 1 explicit non-Windows PowerShell test skipped (2026-08-09)",
+        "tests/test_core_profile.py::test_receipt_freshness_ignores_unexecuted_config_changes -> unselected V4 gate and unrelated high-risk profile changes remain current while an executed V1 change becomes stale (2026-08-09)",
+        "tests/test_core_profile.py::test_historical_schema_two_and_three_receipts_survive_reverification -> schema-v2 and schema-v3 history preserved behind current schema-v4 proof (2026-08-09)",
+        "template/core/scripts/harness.py -> schema-v4 full config provenance plus execution-scoped freshness digest, with harness.config.json rejected as a duplicate tracked file (2026-08-09)"
+      ],
+      "sources": [
+        "SRC-CH-008..010",
+        "SRC-TPL-005..006",
+        "SRC-ADV-023"
+      ],
+      "notes": "Completed by explicit user request on 2026-08-09 as Core 0.3.0. Automatic pre-1.0 minor upgrade remains intentionally refused, so 0.2.x adopters use reviewed manual adoption and schema-v4 re-verification."
+    },
+    {
+      "id": "HST-011",
+      "priority": 11,
+      "area": "agent-communication",
+      "title": "Standardize resident-agent communication and self-review",
+      "behavior": "Every installed Core agent communicates with users in concise Korean honorifics, explains technical work at an undergraduate computer-science level, uses visuals only when they improve understanding, distinguishes evidence from inference, and reviews its response before delivery.",
+      "status": "passing",
+      "verification": [
+        "Route mandatory user-facing rules from the installed AGENTS.md to one detailed communication contract.",
+        "Install the contract in an empty Fixture and verify Korean honorific, accessible explanation, concise reporting, visual-selection, evidence-boundary, safety, and self-review requirements.",
+        "Register the new Core file in the component and source ledgers and reject distribution drift.",
+        "Run ./init.sh and preserve all lifecycle, platform, evidence, source-traceability, and representative-stack fixtures."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 34/34, embedded-ledger source traceability 65/65, Core self-audit, and 40 dynamic Fixture tests discovered: 39 passed, 1 explicit non-Windows PowerShell test skipped (2026-08-09)",
+        "tests/test_core_profile.py::test_resident_agent_communication_contract_is_installed_and_routed -> distribution and empty installed Fixture contain the routed Korean honorific, accessible explanation, evidence, visual-selection, safety, and self-review contract (2026-08-09)",
+        "template/core/docs/harness/components.json + source-map.json + docs/source-disposition.md -> HC-019 and its three direct sources pass exact file coverage and bidirectional traceability validation (2026-08-09)"
+      ],
+      "sources": [
+        "SRC-CH-004",
+        "SRC-TPL-001",
+        "SRC-ADV-024"
+      ],
+      "notes": "Completed by explicit user request on 2026-08-09 and folded into the uncommitted Core 0.3.0 worktree. AGENTS.md remains short; detailed communication and self-improvement guidance lives in a nearby Core document."
+    },
+    {
+      "id": "HST-012",
+      "priority": 12,
+      "area": "agent-loop-efficiency",
+      "title": "Bound self-improvement context and startup cost",
+      "behavior": "Installed Core agents improve confirmed recurring structural defects through an authority-aware terminating loop, keep startup instructions and per-feature operational history bounded, and recover the current work item without loading whole ledgers or unrelated documents.",
+      "status": "passing",
+      "verification": [
+        "Define reproducibility, authority, smallest-fix, consolidation, verification, and termination boundaries for resident-agent self-improvement.",
+        "Reject oversized always-read instruction and state files and bound per-feature evidence references and transition history without deleting receipt files.",
+        "Route normal startup through the bounded cold-start summary and task-relevant documents instead of whole feature, Source, receipt, architecture, and validation histories.",
+        "Install Core in an empty Fixture, prove the new bounds and compaction behavior, and run ./init.sh without lifecycle, platform, evidence, or traceability regression."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 34/34, embedded-ledger source traceability 65/65, Core self-audit, and 41 dynamic Fixture tests discovered: 40 passed, 1 explicit non-Windows PowerShell test skipped; real 20.39s (2026-08-09)",
+        "tests/test_core_profile.py::test_startup_context_and_operational_history_are_bounded -> installed Fixture rejects oversized always-read files and manual history/evidence overflow while append helpers retain the newest 20 transitions and 5 receipt references (2026-08-09)",
+        "Measured Core startup route -> mandatory static reading reduced from 6 files/19,317 bytes to 2 files/5,366 bytes plus a bounded 1,174-byte cold-start JSON; managed Core remains 19 files (2026-08-09)",
+        "template/core/docs/COMMUNICATION.md + AGENTS.md -> reproducibility, authority, one-smallest-fix, focused verification, consolidation, and explicit termination contract routed without a new subsystem (2026-08-09)"
+      ],
+      "sources": [
+        "SRC-CH-004..005",
+        "SRC-CH-007..008",
+        "SRC-CH-012",
+        "SRC-ADV-024"
+      ],
+      "notes": "Completed by explicit user request on 2026-08-09 and folded into the uncommitted Core 0.3.0 worktree. Existing Core files and validators were reused; no governance, observability, archive, multi-agent, or provider subsystem was added."
+    },
+    {
+      "id": "HST-013",
+      "priority": 13,
+      "area": "autonomous-self-improvement",
+      "title": "Authorize bounded autonomous structural self-improvement",
+      "behavior": "Every installed Core agent may, without a separate user command, repair a confirmed recurring or reproducible defect in agent behavior, harness engineering, or loop engineering through one bounded repository-local improvement loop while preserving explicit user stop instructions, WIP=1, product scope, external-action boundaries, and completion evidence.",
+      "status": "passing",
+      "verification": [
+        "Replace the answer/diagnosis mutation prohibition with a narrow standing exception for confirmed repository-local agent, harness, and loop defects unless the user explicitly forbids changes.",
+        "Define trigger evidence, allowed and forbidden surfaces, user notification, BOOT-001 maintenance routing, one-loop budget, focused verification, and termination behavior.",
+        "Make installed Core audit reject removal of the versioned autonomous-improvement contract from AGENTS.md or docs/COMMUNICATION.md.",
+        "Install Core in an empty Fixture, prove contract drift rejection, and run ./init.sh without lifecycle, platform, evidence, context-budget, or traceability regression."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 34/34, embedded-ledger source traceability 65/65, Core self-audit, and 42 dynamic Fixture tests discovered: 41 passed, 1 explicit non-Windows PowerShell test skipped (2026-08-09)",
+        "tests/test_core_profile.py::test_autonomous_structural_self_improvement_contract_is_enforced -> distribution and empty installed Fixture contain the versioned standing authority, trigger checkpoints, explicit opt-out, product/external boundaries, BOOT-001 routing, and one-loop budget; removing the marker from either routed file makes installed audit fail (2026-08-09)",
+        "template/core/scripts/harness.py::validate_autonomous_improvement_contract -> installed audit rejects removal or weakening of required autonomous-improvement clauses with WHAT/WHY/FIX guidance (2026-08-09)",
+        "template/core/AGENTS.md + template/core/docs/COMMUNICATION.md -> answer/diagnosis mutation prohibition now has one narrow, reversible structural-maintenance exception with focused verification and explicit termination (2026-08-09)"
+      ],
+      "sources": [
+        "SRC-CH-004..005",
+        "SRC-CH-007..012",
+        "SRC-TPL-001",
+        "SRC-ADV-024"
+      ],
+      "notes": "Completed by explicit user request on 2026-08-09 and folded into the uncommitted Core 0.3.0 worktree. The repository contract makes bounded autonomous repair the default, but cannot override a host's higher-priority policy or guarantee that every model semantically recognizes every defect."
+    },
+    {
+      "id": "HST-014",
+      "priority": 14,
+      "area": "callable-harness-audit",
+      "title": "Add a cross-agent callable harness health audit skill",
+      "behavior": "Every installed Core project exposes one on-demand, read-only audit-harness-health Skill from the Codex-centered .agents/skills canonical path, with a bounded Claude pointer that reads the same source, so agents can detect drift in resident-agent, harness, and loop contracts without loading unrelated history or duplicating audit logic.",
+      "status": "passing",
+      "verification": [
+        "Install one canonical .agents Skill that routes a quick or deep read-only audit through current repository truth surfaces and existing deterministic validators while separating confirmed defects from warnings and runtime unknowns.",
+        "Install a bounded .claude pointer Skill that resolves to the canonical Skill without duplicating its workflow, and reject name, description, target, or size drift.",
+        "Track every new Core file, provenance edge, startup cost, lifecycle ownership, and rollback path without weakening the existing link and reparse-point safety contract.",
+        "Install Core in an empty Fixture, prove canonical and bridge drift rejection plus audit read-only behavior, and run ./init.sh without lifecycle, evidence, context-budget, platform, or traceability regression."
+      ],
+      "evidence": [
+        "./init.sh -> required artifacts 36/36, embedded-ledger source traceability 65/65, Core self-audit, and 43 dynamic Fixture tests discovered: 42 passed, 1 explicit non-Windows PowerShell test skipped (2026-08-09)",
+        "tests/test_core_profile.py::test_callable_harness_audit_skill_is_installed_and_routed -> distribution and empty installed Fixture contain one .agents canonical Skill and one bounded .claude pointer; audit preserves every file digest and rejects canonical marker, pointer target, and description drift (2026-08-09)",
+        "template/core/scripts/harness.py::validate_audit_skill_contract -> installed audit rejects missing, link-like, oversized, misnamed, duplicated, or incorrectly routed audit Skill files with actionable errors (2026-08-09)",
+        "template/core/docs/harness/components.json + source-map.json + docs/source-disposition.md -> HC-020 canonical and HC-021 Claude pointer pass exact 21-file ownership and bidirectional source traceability validation (2026-08-09)"
+      ],
+      "sources": [
+        "SRC-CH-004..005",
+        "SRC-CH-007..012",
+        "SRC-TPL-001..002",
+        "SRC-ADV-024"
+      ],
+      "notes": "Completed by explicit user request on 2026-08-09 and folded into the uncommitted Core 0.3.0 worktree. Filesystem symlinks are intentionally avoided because Core rejects managed reparse points; the Claude entry is a bounded textual pointer to the .agents canonical workflow. Static registration and drift checks cannot guarantee that every client version selects the Skill or follows it semantically, so real client behavior remains an explicit runtime boundary."
+    },
+    {
+      "id": "HST-015",
+      "priority": 15,
+      "area": "real-adoption-friction",
+      "title": "Validate real adoption and eliminate no-op lifecycle writes",
+      "behavior": "A realistic existing product project can adopt, configure, validate, complete, and maintain Core without changing product files, depending on the starter checkout, or accumulating backup and manifest noise when a same-version upgrade has no effective change.",
+      "status": "passing",
+      "verification": [
+        "Install Core through dry-run and actual operations into an isolated Git project under repos_hyeonbungi, then configure real structured Python product commands and complete BOOT-001 with current evidence.",
+        "Prove existing product file digests remain unchanged, installed files contain no starter checkout or user-specific absolute paths, cold-start answers are complete, and the project finishes clean.",
+        "Make an actual same-version upgrade with only preserved local customization a true no-op: no manifest rewrite, timestamp, backup directory, or misleading upgraded report.",
+        "Preserve backup and rollback behavior for effective patch upgrades and removal, rerun the full starter baseline, and delete every isolated adoption project after evidence is captured."
+      ],
+      "evidence": [
+        "Two isolated Git projects created under /Users/hyeonbungi/repos_hyeonbungi -> dry-run and actual 21-file install, project-specific structured Python configuration, repeat init, complete BOOT-001, schema-v4 receipt, cold-start, start, audit, and clean Git handoff all passed while four pre-existing product file SHA-256 digests remained unchanged (2026-08-09)",
+        "Fresh post-fix project same-version upgrade -> manifest SHA-256 aa35049ba093e0005136526a38ae97d692e0bd0267a0665b4fd9daccf3d01d9c before and after, backup directories 0 before and after, no Git changes, and output reported no files or manifest written (2026-08-09)",
+        "tests/test_core_profile.py::test_same_version_noop_upgrade_does_not_write + five focused lifecycle regressions -> no-op writes nothing while compatible patch backup, rollback, manual merge, version refusal, and modified-file removal protection remain passing (2026-08-09)",
+        "Measured fresh adoption -> 21 explained managed files/196,091 bytes, 6,973 mandatory startup bytes, 7,889 on-demand Skill bytes, init real 0.18s, and local-code verification real 0.59s on the macOS fixture (2026-08-09)",
+        "./init.sh -> required artifacts 36/36, embedded-ledger source traceability 65/65, Core self-audit, and 44 dynamic Fixture tests discovered: 43 passed, 1 explicit non-Windows PowerShell test skipped (2026-08-09)",
+        "Temporary projects hesl-adoption-audit.ggtG8C and hesl-adoption-retest.ZDYjme -> exact path, directory type, and Git root validated; removed from repos_hyeonbungi to macOS Trash after testing (2026-08-09)"
+      ],
+      "sources": [
+        "SRC-CH-005",
+        "SRC-CH-012",
+        "SRC-ADV-002",
+        "SRC-PRJ-002"
+      ],
+      "notes": "Completed from an explicit real-adoption request on 2026-08-09. The reproduced defect was fixed by returning before the backup boundary only when file operations, version changes, and accepted manifest-baseline transitions are all absent. Effective same-version file changes still back up and refresh the manifest, making tracked evidence stale as intended. Modified managed files still make removal refuse before writes; that protection and manual project-specific configuration remain intentional adoption boundaries."
     }
   ]
 }

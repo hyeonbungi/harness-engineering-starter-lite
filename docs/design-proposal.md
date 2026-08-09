@@ -2,7 +2,7 @@
 
 ## 구현 상태
 
-2026-07-25 현재 아래 항목은 제안이 아니라 구현·Fixture 검증된 상태입니다.
+2026-08-09 현재 아래 항목은 제안이 아니라 구현·Fixture 검증된 상태입니다.
 
 | 항목 | 구현 | 검증 |
 | --- | --- | --- |
@@ -12,12 +12,15 @@
 | 콜드 스타트 | `cold-start --json` | 5개 질문의 구조화 답변 |
 | 단계별 완료 게이트 | V0~V4 위험 프로필 | 실패 차단, 위험 하향 금지, 클린 상태 |
 | 기능별 실행 검증 | `verification.bindings` | 누락·프로필 밖·미실행 gate 거부 |
-| 증거 신선도 | receipt·config·verification·tracked file hash와 revision | 불완전·변조·stale `passing` 거부·재개 |
+| 증거 신선도 | schema-v4 전체 provenance + 실행 계약 config digest | 미실행 gate 변경 유지, 실행 계약·파일·runtime 회귀 거부 |
 | 제한 runner | repo `cwd`, timeout, bounded/redacted log | hang·대출력·누락 실행 파일 Fixture |
 | Claude Code 진입점 | root/Core `CLAUDE.md`의 `@AGENTS.md` import | root validator·설치본 audit·드리프트 실패 Fixture |
+| 상주 에이전트 커뮤니케이션 | 짧은 `AGENTS.md` 라우팅 + `docs/COMMUNICATION.md` | 빈 설치본의 언어·설명·시각화·증거·자기점검 계약 Fixture |
+| 자동 자기개선·컨텍스트 예산 | 상시 저장소 권한 + WIP/종료 루프 + 시작 파일 상한 + bounded 상태·증거 | 계약 제거·과대 파일·누적 배열 거부와 최근 window Fixture |
+| 호출형 하네스 건강 감사 | `.agents` 정본 + `.claude` 텍스트 포인터 | 빈 설치본의 정본·포인터·읽기 전용·드리프트 거부 Fixture |
 | 네이티브 Windows 어댑터 | `init.ps1`, current-Python token, Windows process tree | 정적·모의 Windows Fixture와 조건부 네이티브 실행 |
 | 자료 처분·독립 해석 | 65행 결정표 + 설치본 `source-map.json` | 원장 65/65·양방향 연결 |
-| 배포 수명주기 | `VERSION`, `LICENSE`, `NOTICE`, install manifest | 실제 patch upgrade·version guard·rollback·remove Fixture |
+| 배포 수명주기 | `VERSION`, `LICENSE`, `NOTICE`, install manifest | 같은 버전 no-op·실제 patch upgrade·version guard·rollback·remove Fixture |
 
 스타터 자체의 `./init.sh` 또는 `.\init.ps1`이 이 동작을 동적 Fixture에서
 반복 검증합니다.
@@ -34,6 +37,8 @@
 - 새 세션이 5개 콜드 스타트 질문에 답할 수 있음
 - WIP=1과 증거 기반 완료가 기계적으로 검사됨
 - 사람용 상태 문서가 중복되지 않음
+- 시작 컨텍스트와 기능별 운영 이력이 기계적으로 bounded됨
+- 확인된 에이전트·하네스·루프 결함을 별도 명령 없이 한 번 자동 개선함
 - 위험이 커질 때만 검증·문서·관측 모듈을 승격
 - 모든 구성 요소의 출처·적용 조건·재검토·롤백을 추적
 
@@ -41,6 +46,8 @@
 
 ```text
 project/
+├── .agents/skills/audit-harness-health/ # Codex/공용 호출형 감사 Skill 정본
+├── .claude/skills/audit-harness-health/ # Claude Code 탐색 포인터
 ├── AGENTS.md
 ├── CLAUDE.md                    # @AGENTS.md를 가져오는 Claude Code 진입점
 ├── VERSION
@@ -55,6 +62,7 @@ project/
 └── docs/
     ├── STATE.md                 # bounded current snapshot
     ├── ARCHITECTURE.md          # 실제 경계가 생긴 뒤 채움
+    ├── COMMUNICATION.md         # 사용자 설명·증거 보고·자기점검 계약
     ├── VALIDATION.md            # 위험별 검증 레벨과 황금 여정
     ├── SECURITY.md              # 선택형: 별도 정책이 필요한 경우
     ├── decisions/               # 내구적 근거가 필요할 때만
@@ -74,12 +82,14 @@ project/
 | 구성 | 역할 | 근거 | 트레이드오프 |
 | --- | --- | --- | --- |
 | 짧은 `AGENTS.md` | 요청·시작·작업·완료·종료 라우팅 | `SRC-CH-003..004`, `SRC-TPL-001`, `SRC-REF-006`, `SRC-ADV-003` | 너무 짧으면 공백, 너무 길면 SNR 저하 |
+| `docs/COMMUNICATION.md` | 한국어 존댓말·쉬운 설명·간결한 증거 보고·자동 종료 자기개선 | `SRC-CH-004..005`, `SRC-CH-007`, `SRC-CH-012`, `SRC-TPL-001`, `SRC-ADV-024` | 문서 하나 증가, 대신 상시 권한·안전 경계를 루트 라우터에서 분리 |
+| `audit-harness-health` Skill | 현재 저장소 증거로 agent·harness·loop 철학을 읽기 전용 감사 | `SRC-CH-004..005`, `SRC-CH-007..012`, `SRC-TPL-001..002`, `SRC-ADV-024` | 호출 시에만 약 8 KiB 정본 로드, Claude 포인터는 2 KiB 미만 |
 | `harness.config.json` | 설치·시작·집중·전체 검증 명령을 안전한 배열로 선언 | `SRC-CH-002`, `SRC-CH-006`, `SRC-TPL-008`, `SRC-ADV-010` | 설정 파일 하나 증가, 대신 셸 `eval` 제거 |
 | `feature_list.json` | WIP=1, 상태, 검증, 증거, 근거 | `SRC-CH-007..008`, `SRC-TPL-006` | 작은 작업에도 약간의 기록 비용 |
 | `docs/STATE.md` | 현재 목표·검증·위험·다음 행동 | `SRC-CH-005`, `SRC-TPL-003`, `SRC-TPL-010` | 이력 로그로 비대해지지 않게 bounded 유지 |
 | `init.sh`·`init.ps1` + validator | 운영체제별 멱등 프리플라이트와 fail-loud 진단 | `SRC-CH-006`, `SRC-TPL-008`, `SRC-REF-001`, `SRC-REF-004` | 래퍼 2개를 동기화해야 하지만 네이티브 시작 경로가 명확함 |
 | `docs/ARCHITECTURE.md`·`VALIDATION.md` | 콜드 스타트 구조·검증 요약 | `SRC-CH-003`, `SRC-CH-009..010` | Core에는 짧은 요약만 두고 필요할 때 확장 |
-| Source·Component 원장 | 65개 근거와 18개 구성 요소의 양방향 추적 | `SRC-REF-002`, `SRC-ADV-025..026` | 원장 유지 비용 대신 독립 감사 가능 |
+| Source·Component 원장 | 65개 근거와 21개 구성 요소의 양방향 추적 | `SRC-REF-002`, `SRC-ADV-025..026` | 원장 유지 비용 대신 독립 감사 가능 |
 | 버전·라이선스·수명주기 | 안전한 복제·갱신·제거 경계 | `SRC-RES-001`, `SRC-ADV-002` | manifest 파일 증가, 대신 로컬 변경 보호 |
 
 `CLAUDE.md`는 첫 비어 있지 않은 줄의 `@AGENTS.md` import로 공통 규칙을
@@ -104,7 +114,7 @@ project/
 - 독립 평가자·루브릭: `SRC-CH-009`, `SRC-TPL-005`, `SRC-PRJ-006`
 
 Standard/Advanced는 후속 설계 카탈로그로만 유지합니다. 이를 패키징하는
-`HST-006`은 Core `0.2.1`의 `out_of_scope`이며, 관찰된 병목과 명시적
+`HST-006`은 Core `0.3.0`의 `out_of_scope`이며, 관찰된 병목과 명시적
 재범위 결정이 있는 미래 릴리스에서만 다시 엽니다.
 
 ## 실행 계약
@@ -142,11 +152,14 @@ Standard/Advanced는 후속 설계 카탈로그로만 유지합니다. 이를 �
 명령은 인자 배열로 실행하며 repo 내부 `cwd`, 양수 timeout, 출력 상한을
 적용합니다. 빈 필수 레벨은 “성공”이 아니라 미설정입니다. 기능의 각
 `verification`은 `{level, command_id}`에 연결하고, 신선도를 판정할 정확한
-`tracked_files`를 선언합니다.
+`tracked_files`를 선언합니다. `harness.config.json`은 별도 실행 계약 digest가
+관리하므로 일반 tracked file로 중복 선언하지 않습니다.
 
 `{python}`은 `argv[0]`에서만 허용되는 배포 토큰이며 실행 시 현재
-`harness.py`를 구동한 `sys.executable`로 치환됩니다. 따라서 config digest는
-운영체제에 독립적이고, 실제 실행 argv와 runtime identity는 영수증에 남습니다.
+`harness.py`를 구동한 `sys.executable`로 치환됩니다. 설정 전체 digest는
+provenance로 남기고, freshness digest는 실행한 V0~Vn gate와 runner·공통
+제어면만 포함합니다. 미실행 gate와 무관한 risk profile은 제외하되 실제 실행
+argv와 runtime identity는 영수증에 남습니다.
 POSIX는 새 session/process group을 만들고 timeout 때 group signal을
 보냅니다. Windows는 새 process group을 만들고 CTRL_BREAK를 시도한 뒤
 절대 경로의 `taskkill.exe /T /F`, 마지막으로 직접 kill 순서로 종료합니다.
@@ -179,9 +192,9 @@ passing -> active | blocked   # 회귀 또는 증거 만료
 | V3 | E2E 황금 여정 | 사용자 대면·크로스 컴포넌트·외부 효과 |
 | V4 | 성능·보안·복구 | 위험 평가가 요구할 때 |
 
-완료 영수증은 receipt 자체 hash, 실행·생략 레벨, 실제 command ID,
-redacted effective argv digest, `cwd`·timeout·출력 크기, 설정·검증·파일
-digest, revision, OS·Python runtime identity를 기록합니다.
+schema-v4 완료 영수증은 receipt 자체 hash, 실행·생략 레벨, 실제 command ID,
+redacted effective argv digest, `cwd`·timeout·출력 크기, 전체 설정 provenance,
+실행 계약·검증·파일 digest, revision, OS·Python runtime identity를 기록합니다.
 
 ## 근거 추적 계약
 
@@ -223,13 +236,21 @@ digest, revision, OS·Python runtime identity를 기록합니다.
 5. 기능 연결·신선도·runner·설치 경계·65개 Source·배포 수명주기 보강 — 완료
 6. PowerShell 진입점·Windows process/path/receipt 어댑터 추가 — 완료
 7. Claude Code `@AGENTS.md` import와 드리프트 거부 검사 추가 — 완료
-8. Standard 모듈 패키징 — 현재 `0.2.1` 범위 밖, 미래 릴리스의 명시적 재범위 필요
-9. Advanced 모듈 패키징 — 현재 `0.2.1` 범위 밖, 병목·가치 증거와 명시적 재범위 필요
+8. 실행 계약별 config digest와 schema-v4 영수증 추가 — 완료
+9. 상주 에이전트 커뮤니케이션·자기점검 계약 추가 — 완료
+10. 자기개선 종료 조건·시작 컨텍스트 예산·운영 이력 window 추가 — 완료
+11. 저장소 내부 구조 결함의 bounded 상시 자기개선 권한 추가 — 완료
+12. cross-agent 호출형 하네스 건강 감사 Skill 추가 — 완료
+13. Standard 모듈 패키징 — 현재 `0.3.0` 범위 밖, 미래 릴리스의 명시적 재범위 필요
+14. Advanced 모듈 패키징 — 현재 `0.3.0` 범위 밖, 병목·가치 증거와 명시적 재범위 필요
 
 ## 성능·유지보수
 
 - 시작 경로는 네트워크 설치를 자동 실행하지 않고, `--setup`처럼 명시적
   모드에서만 의존성을 동기화하는 편이 빠르고 안전합니다.
+- 일반 시작은 `AGENTS.md`·현재 `STATE`·bounded cold-start 요약에서 기능
+  하나를 고른 뒤 관련 문서만 읽습니다. 전체 원장과 과거 영수증은 필요할
+  때만 엽니다.
 - 빠른 검증과 전체 검증을 분리하되, 완료에 필요한 레벨을 낮추지 않습니다.
 - 성공 출력은 짧게, 실패 출력은 실행 가능한 진단으로 만듭니다.
 - runner는 stdout/stderr를 계속 drain하되 각 stream의 bounded tail만
@@ -238,11 +259,17 @@ digest, revision, OS·Python runtime identity를 기록합니다.
   결정적이고 변경 영향 범위가 작습니다.
 - 상태 문서는 현재 사실만 유지하고, 내구 이력은 Git·완료 계획·결정 문서로
   이동합니다.
+- 항상 읽는 지침·상태 파일은 byte 상한을 두고, 기능마다 최신 전환 20개와
+  영수증 참조 5개만 운영 원장에 유지합니다. 실제 영수증 파일은 보존합니다.
+- 자동 자기개선은 한 사용자 작업당 한 번, 기존 하네스 파일과 집중 검사로
+  제한합니다. 추가 후보는 보고만 하여 개선이 개선을 연쇄 생성하지 않게 합니다.
+- 건강 감사 Skill은 호출할 때만 정본을 읽고 기존 `harness.py audit`를 한 번
+  재사용합니다. Claude 포인터에는 감사 규칙을 복제하지 않습니다.
 - 구성 요소마다 재검토 트리거를 두고 절제 실험으로 삭제 가능성을 확인합니다.
 
 ## 롤백·안전한 마이그레이션
 
-- 초기 도입은 dry-run 뒤 제품 코드와 분리된 18개 하네스 파일만 추가합니다.
+- 초기 도입은 dry-run 뒤 제품 코드와 분리된 21개 하네스 파일만 추가합니다.
 - 각 프로필은 독립 커밋으로 적용해 제거 가능하게 합니다.
 - 업그레이드·제거는 설치 manifest가 소유권과 현재 digest를 증명하는
   파일만 변경하고, downgrade·호환되지 않는 버전을 거부하며, 쓰기 전
@@ -254,6 +281,8 @@ digest, revision, OS·Python runtime identity를 기록합니다.
 - validator를 CI 필수 게이트로 만들기 전 관찰 모드로 한 주기 실행합니다.
 - 기존 상태 문서가 있으면 새 문서를 병렬로 늘리지 않고 필드를 매핑한 뒤
   하나의 canonical surface로 전환합니다.
+- `0.3.0` 수동 채택 시 기능별 전환은 최신 20개, 영수증 참조는 최신 5개로
+  검토·축약하되 `.harness/evidence/`의 영수증 파일은 삭제하지 않습니다.
 - 자동 상태 전환은 영수증 이력을 남기며, 수동 복구 경로를 제공합니다.
 
 ## 과설계 방지 게이트

@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "harness.config.json"
 ALL_LEVELS = ("V0", "V1", "V2", "V3", "V4")
 REQUIRED_FILES = (
+    ".agents/skills/audit-harness-health/SKILL.md",
+    ".claude/skills/audit-harness-health/SKILL.md",
     "AGENTS.md",
     "CLAUDE.md",
     "LICENSE",
@@ -40,6 +42,7 @@ REQUIRED_FILES = (
     "scripts/harness.py",
     "docs/STATE.md",
     "docs/ARCHITECTURE.md",
+    "docs/COMMUNICATION.md",
     "docs/VALIDATION.md",
     "docs/harness/ADOPTION.md",
     "docs/harness/LIFECYCLE.md",
@@ -51,6 +54,62 @@ PLACEHOLDERS = ("REPLACE_ME", "YYYY-MM-DD")
 PYTHON_TOKEN = "{python}"
 STATE_BLOCK_START = "<!-- harness:state:start -->"
 STATE_BLOCK_END = "<!-- harness:state:end -->"
+STARTUP_CONTEXT_LIMITS = {
+    "AGENTS.md": 8 * 1024,
+    "CLAUDE.md": 4 * 1024,
+    "docs/COMMUNICATION.md": 16 * 1024,
+    "docs/STATE.md": 16 * 1024,
+}
+MAX_FEATURE_EVIDENCE_REFERENCES = 5
+MAX_FEATURE_HISTORY_EVENTS = 20
+AUTONOMOUS_IMPROVEMENT_MARKER = "<!-- harness:auto-improvement:v1 -->"
+AUTONOMOUS_IMPROVEMENT_REQUIREMENTS = {
+    "AGENTS.md": (
+        "별도 사용자 명령 없이도",
+        "최종 응답 직전에",
+        "변경 금지·중지",
+        "제품 동작",
+        "BOOT-001",
+        "최대 한 번",
+    ),
+    "docs/COMMUNICATION.md": (
+        "상시 자기개선 권한",
+        "별도 사용자 명령 없이도",
+        "최종 응답 직전에 발동 조건",
+        "답변·진단·제안 중 발견해도",
+        "호스트의 상위 정책",
+        "제품 기능·데이터",
+        "BOOT-001",
+        "최대 한 번",
+    ),
+}
+AUDIT_SKILL_NAME = "audit-harness-health"
+AUDIT_SKILL_CANONICAL = ".agents/skills/audit-harness-health/SKILL.md"
+AUDIT_SKILL_BRIDGES = {
+    ".claude/skills/audit-harness-health/SKILL.md": (
+        "../../../.agents/skills/audit-harness-health/SKILL.md"
+    ),
+}
+AUDIT_SKILL_CONTEXT_LIMITS = {
+    AUDIT_SKILL_CANONICAL: 12 * 1024,
+    **{relative: 2 * 1024 for relative in AUDIT_SKILL_BRIDGES},
+}
+AUDIT_SKILL_REQUIRED_TEXT = (
+    "<!-- harness:audit-skill:v1 -->",
+    "읽기 전용",
+    "python3 scripts/harness.py audit",
+    "빠른 감사",
+    "집중 감사",
+    "깊은 감사",
+    "git status --short",
+    "healthy",
+    "degraded",
+    "unknown",
+)
+AUDIT_SKILL_ROUTER_REQUIREMENTS = (
+    "$audit-harness-health",
+    "감사 중에는 자동 개선을 수행하지 않고",
+)
 SENSITIVE_ENV_NAME = re.compile(
     r"(?:TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL|AUTH)",
     re.IGNORECASE,
@@ -104,6 +163,135 @@ def validate_claude_entrypoint() -> None:
             "CLAUDE.md must begin with a standalone @AGENTS.md import so "
             "shared instructions have one source of truth."
         )
+
+
+def validate_startup_context() -> None:
+    for relative, maximum in STARTUP_CONTEXT_LIMITS.items():
+        path = ROOT / relative
+        try:
+            size = path.stat().st_size
+        except OSError as exc:
+            raise HarnessFailure(f"cannot inspect {relative}: {exc}") from exc
+        if size > maximum:
+            raise HarnessFailure(
+                f"{relative} is {size} bytes; the startup context limit is "
+                f"{maximum} bytes. This always-read surface has accumulated too "
+                "much context. Consolidate duplicate rules, replace historical "
+                "narrative with current facts, or move task-specific detail to an "
+                "existing nearby document; do not raise the limit just to pass audit."
+            )
+
+
+def validate_autonomous_improvement_contract() -> None:
+    for relative, required_text in AUTONOMOUS_IMPROVEMENT_REQUIREMENTS.items():
+        path = ROOT / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HarnessFailure(f"cannot read {relative}: {exc}") from exc
+        missing = [
+            value
+            for value in (AUTONOMOUS_IMPROVEMENT_MARKER, *required_text)
+            if value not in text
+        ]
+        if missing:
+            raise HarnessFailure(
+                "WHAT: autonomous self-improvement contract drifted in "
+                f"{relative}; missing {missing}.\n"
+                "WHY: resident agents would no longer have a bounded standing "
+                "authority to repair structural agent, harness, or loop defects.\n"
+                "FIX: restore the v1 marker and required authority, opt-out, scope, "
+                "budget, and maintenance-routing language; then rerun audit."
+            )
+
+
+def skill_frontmatter(text: str, relative: str) -> dict[str, str]:
+    if not text.startswith("---\n"):
+        raise HarnessFailure(f"{relative} must begin with YAML frontmatter.")
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        raise HarnessFailure(f"{relative} has unterminated YAML frontmatter.")
+    values: dict[str, str] = {}
+    for line in text[4:end].splitlines():
+        if not line.strip():
+            continue
+        if ":" not in line:
+            raise HarnessFailure(f"{relative} has invalid frontmatter: {line!r}")
+        key, value = line.split(":", 1)
+        values[key.strip()] = value.strip().strip("\"'")
+    return values
+
+
+def validate_audit_skill_contract() -> None:
+    texts: dict[str, str] = {}
+    for relative, maximum in AUDIT_SKILL_CONTEXT_LIMITS.items():
+        path = ROOT / relative
+        if is_link_like(path) or not path.is_file():
+            raise HarnessFailure(
+                f"WHAT: audit Skill entry is missing, linked, or non-regular: {relative}.\n"
+                "WHY: Core uses managed textual pointers so one canonical workflow "
+                "remains portable across Codex, Claude, and Windows checkouts.\n"
+                "FIX: restore the regular managed SKILL.md entry and rerun audit."
+            )
+        size = path.stat().st_size
+        if size > maximum:
+            raise HarnessFailure(
+                f"WHAT: {relative} is {size} bytes; its audit Skill limit is "
+                f"{maximum} bytes.\n"
+                "WHY: callable audit guidance must stay bounded and pointer entries "
+                "must not become duplicate workflows.\n"
+                "FIX: consolidate the canonical Skill or reduce the bridge to its "
+                "frontmatter and canonical pointer; do not raise the limit to pass."
+            )
+        try:
+            texts[relative] = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HarnessFailure(f"cannot read {relative}: {exc}") from exc
+
+    canonical = texts[AUDIT_SKILL_CANONICAL]
+    canonical_meta = skill_frontmatter(canonical, AUDIT_SKILL_CANONICAL)
+    if canonical_meta.get("name") != AUDIT_SKILL_NAME:
+        raise HarnessFailure(
+            f"{AUDIT_SKILL_CANONICAL} must declare name: {AUDIT_SKILL_NAME}."
+        )
+    description = canonical_meta.get("description", "").strip()
+    missing = [value for value in AUDIT_SKILL_REQUIRED_TEXT if value not in canonical]
+    agents_text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    router_missing = [
+        value for value in AUDIT_SKILL_ROUTER_REQUIREMENTS if value not in agents_text
+    ]
+    if not description or missing or router_missing:
+        raise HarnessFailure(
+            "WHAT: canonical audit Skill contract drifted; "
+            f"missing Skill text {missing} or AGENTS routing {router_missing}.\n"
+            "WHY: agents could stop discovering the Skill or overstate a shallow, "
+            "mutating, or unbounded check as a harness health audit.\n"
+            "FIX: restore the v1 read-only, depth, evidence, Git-hygiene, and "
+            "interpretation contract; then rerun audit."
+        )
+
+    canonical_path = (ROOT / AUDIT_SKILL_CANONICAL).resolve()
+    for relative, target in AUDIT_SKILL_BRIDGES.items():
+        text = texts[relative]
+        metadata = skill_frontmatter(text, relative)
+        resolved_target = ((ROOT / relative).parent / target).resolve()
+        if (
+            metadata.get("name") != AUDIT_SKILL_NAME
+            or metadata.get("description") != description
+            or "<!-- harness:skill-bridge:v1 -->" not in text
+            or target not in text
+            or "처음부터 끝까지 읽고" not in text
+            or resolved_target != canonical_path
+            or "<!-- harness:audit-skill:v1 -->" in text
+            or "## 핵심 계약" in text
+        ):
+            raise HarnessFailure(
+                f"WHAT: audit Skill pointer drifted in {relative}.\n"
+                "WHY: platform entries must discover the same canonical workflow "
+                "without copying or forking its audit rules.\n"
+                f"FIX: restore matching name/description and the pointer to {target}; "
+                "keep all audit logic in the canonical .agents Skill."
+            )
 
 
 def atomic_write_text(path: Path, payload: str) -> None:
@@ -163,6 +351,41 @@ def safe_repo_path(relative: str) -> Path:
 
 def config_digest(config: dict[str, Any]) -> str:
     payload = json.dumps(config, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def execution_config_digest(
+    config: dict[str, Any],
+    risk: str,
+    required_levels: list[str],
+) -> str:
+    """Hash only configuration that can affect the selected completion run."""
+    startup_profile = config["startup_profile"]
+    relevant_profiles = {
+        name: config["risk_profiles"][name]
+        for name in dict.fromkeys((risk, startup_profile))
+        if name in config["risk_profiles"]
+    }
+    projection = {
+        "schema_version": config["schema_version"],
+        "configured": config["configured"],
+        "project": config["project"],
+        "paths": config["paths"],
+        "commands": config["commands"],
+        "runner": config["runner"],
+        "gates": {
+            level: config["gates"][level]
+            for level in required_levels
+        },
+        "risk_profiles": relevant_profiles,
+        "startup_profile": startup_profile,
+        "clean_state": config["clean_state"],
+    }
+    payload = json.dumps(
+        projection,
+        ensure_ascii=False,
+        sort_keys=True,
+    ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -527,6 +750,7 @@ def tracked_file_entries(
         raise HarnessFailure(f"{feature_id}.tracked_files contains duplicate paths.")
 
     mutable = {
+        CONFIG_PATH.relative_to(ROOT).as_posix(),
         Path(config["paths"]["feature_list"]).as_posix(),
         Path(config["paths"]["state"]).as_posix(),
     }
@@ -609,10 +833,10 @@ def validate_receipt_reference(
     if receipt_data.get("feature_id") != feature_id or receipt_data.get("result") != "passing":
         raise HarnessFailure(f"{feature_id} receipt is not a matching passing result: {receipt}")
     receipt_schema = receipt_data.get("schema_version")
-    if receipt_schema not in (2, 3):
+    if receipt_schema not in (2, 3, 4):
         raise HarnessFailure(
-            f"{feature_id} receipt must use current schema_version 3 "
-            f"or historical schema_version 2: {receipt}"
+            f"{feature_id} receipt must use current schema_version 4 "
+            f"or historical schema_version 2 or 3: {receipt}"
         )
     for field in ("recorded_at", "revision", "risk_profile"):
         if not isinstance(receipt_data.get(field), str) or not receipt_data[field]:
@@ -621,8 +845,16 @@ def validate_receipt_reference(
         value = receipt_data.get(field)
         if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
             raise HarnessFailure(f"{feature_id} receipt has invalid {field}: {receipt}")
+    if receipt_schema == 4:
+        execution_config_sha256 = receipt_data.get("execution_config_sha256")
+        if not isinstance(execution_config_sha256, str) or not re.fullmatch(
+            r"[0-9a-f]{64}", execution_config_sha256
+        ):
+            raise HarnessFailure(
+                f"{feature_id} receipt has invalid execution_config_sha256: {receipt}"
+            )
     runtime = receipt_data.get("runtime")
-    if receipt_schema == 3:
+    if receipt_schema in (3, 4):
         if not isinstance(runtime, dict):
             raise HarnessFailure(
                 f"{feature_id} receipt has invalid runtime identity: {receipt}"
@@ -681,7 +913,7 @@ def validate_receipt_reference(
             raise HarnessFailure(
                 f"{feature_id} receipt gate record has invalid argv_sha256."
             )
-        if receipt_schema == 3:
+        if receipt_schema in (3, 4):
             expected_argv_sha256 = hashlib.sha256(
                 json.dumps(argv, ensure_ascii=False).encode("utf-8")
             ).hexdigest()
@@ -735,12 +967,20 @@ def validate_receipt_reference(
         return
 
     stale: list[str] = []
-    if receipt_schema != 3:
+    if receipt_schema == 2:
         stale.append("historical receipt schema lacks current runtime identity")
     elif receipt_data.get("runtime") != runtime_identity():
         stale.append("operating system or Python runtime changed")
-    if receipt_data.get("config_sha256") != config_digest(config):
-        stale.append("harness.config.json changed")
+    if receipt_schema != 4:
+        stale.append(
+            "historical receipt schema lacks current execution configuration digest"
+        )
+    elif receipt_data.get("execution_config_sha256") != execution_config_digest(
+        config,
+        receipt_data["risk_profile"],
+        receipt_data["required_levels"],
+    ):
+        stale.append("executed configuration contract changed")
     if receipt_data.get("verification_sha256") != verification_digest(feature):
         stale.append("feature verification or risk definition changed")
     current_entries = tracked_file_entries(config, feature)
@@ -906,6 +1146,18 @@ def validate_features(
         for field in ("evidence", "history", "sources"):
             if not isinstance(feature.get(field), list):
                 raise HarnessFailure(f"{feature_id}.{field} must be an array.")
+        bounded_fields = {
+            "evidence": MAX_FEATURE_EVIDENCE_REFERENCES,
+            "history": MAX_FEATURE_HISTORY_EVENTS,
+        }
+        for field, maximum_entries in bounded_fields.items():
+            if len(feature[field]) > maximum_entries:
+                raise HarnessFailure(
+                    f"{feature_id}.{field} retains {len(feature[field])} entries; "
+                    f"the operational window is {maximum_entries}. Keep only the "
+                    "newest entries in feature_list.json; receipt files and Git "
+                    "remain the durable history."
+                )
         if not feature["sources"]:
             raise HarnessFailure(f"{feature_id}.sources must be non-empty.")
         for reference in feature["sources"]:
@@ -1165,6 +1417,9 @@ def audit_repository(
             + ", ".join(missing)
             + ". Restore them before continuing."
         )
+    validate_startup_context()
+    validate_autonomous_improvement_contract()
+    validate_audit_skill_contract()
     validate_claude_entrypoint()
     config = read_json(CONFIG_PATH)
     validate_config(config, template_mode=template_mode)
@@ -1517,17 +1772,29 @@ def ensure_no_other_active(features_data: dict[str, Any], feature_id: str) -> No
         )
 
 
+def append_bounded_feature_entry(
+    feature: dict[str, Any], field: str, entry: dict[str, Any], maximum: int
+) -> None:
+    entries = feature.setdefault(field, [])
+    entries.append(entry)
+    if len(entries) > maximum:
+        del entries[:-maximum]
+
+
 def append_history(
     feature: dict[str, Any], previous: str, target: str, reason: str
 ) -> None:
-    feature.setdefault("history", []).append(
+    append_bounded_feature_entry(
+        feature,
+        "history",
         {
             "at": utc_now(),
             "from": previous,
             "to": target,
             "reason": reason,
             "revision": current_revision(),
-        }
+        },
+        MAX_FEATURE_HISTORY_EVENTS,
     )
 
 
@@ -1682,7 +1949,7 @@ def complete_feature(feature_id: str, risk: str) -> None:
     receipt_path = evidence_dir / f"{stamp}-{safe_id}.json"
     relative_receipt = str(receipt_path.relative_to(ROOT))
     receipt = {
-        "schema_version": 3,
+        "schema_version": 4,
         "feature_id": feature_id,
         "result": "passing",
         "recorded_at": recorded_at,
@@ -1692,6 +1959,7 @@ def complete_feature(feature_id: str, risk: str) -> None:
         "executed": records,
         "skipped_levels": [level for level in ALL_LEVELS if level not in levels],
         "config_sha256": config_digest(config),
+        "execution_config_sha256": execution_config_digest(config, risk, levels),
         "verification_sha256": verification_digest(feature),
         "tracked_files": tracked_entries,
         "tracked_files_sha256": tracked_files_digest(tracked_entries),
@@ -1701,14 +1969,17 @@ def complete_feature(feature_id: str, risk: str) -> None:
     atomic_write_json(receipt_path, receipt)
     previous = feature["status"]
     feature["status"] = "passing"
-    feature.setdefault("evidence", []).append(
+    append_bounded_feature_entry(
+        feature,
+        "evidence",
         {
             "receipt": relative_receipt,
             "receipt_sha256": sha256_file(receipt_path),
             "recorded_at": recorded_at,
             "risk_profile": risk,
             "revision": receipt["revision"],
-        }
+        },
+        MAX_FEATURE_EVIDENCE_REFERENCES,
     )
     append_history(feature, previous, "passing", f"Required {risk} gates passed.")
     try:

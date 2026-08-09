@@ -18,6 +18,10 @@
 - [`docs/source-disposition.md`](docs/source-disposition.md): 65개 자료별 반영·통합·보류 결정표
 - [`docs/design-proposal.md`](docs/design-proposal.md): 템플릿 구성과 근거 추적 설계
 - [`template/core/`](template/core/): 실제 프로젝트에 복제할 Core 프로필
+- [`template/core/docs/COMMUNICATION.md`](template/core/docs/COMMUNICATION.md):
+  설치된 상주 에이전트의 한국어 설명·증거 보고·자기점검 계약
+- [`template/core/.agents/skills/audit-harness-health/SKILL.md`](template/core/.agents/skills/audit-harness-health/SKILL.md):
+  복제 프로젝트가 호출하는 읽기 전용 하네스 건강 감사 정본
 - [`scripts/install_core.py`](scripts/install_core.py): 설치 원장 기반 설치·업그레이드·제거 도구
 - [`VERSION`](VERSION), [`LICENSE`](LICENSE), [`NOTICE`](NOTICE): 배포 버전과
   라이선스·귀속 계약
@@ -39,9 +43,10 @@ Windows PowerShell에서는 같은 명령의 `python3` 대신 설치된 Python
 설치기는 입력 대상과 관리 경로의 심볼릭 링크·Windows junction/reparse
 point, 프로젝트 밖으로 해석되는 경로, 대소문자 alias, 기존 파일이나 막힌
 상위 경로를 쓰기 전에 거부합니다. 성공하면
-`.harness/install-manifest.json`에 버전과 18개 관리 파일 digest를 기록합니다.
+`.harness/install-manifest.json`에 버전과 21개 관리 파일 digest를 기록합니다.
 업그레이드와 제거는 이 원장에서 소유권과 로컬 변경 여부를 증명할 수 있는
-파일만 다룹니다.
+파일만 다룹니다. 같은 버전에서 실제 파일·원장 전환이 없는 upgrade는
+manifest나 백업을 새로 쓰지 않습니다.
 
 설치 후 다음 순서로 설정합니다.
 
@@ -57,6 +62,22 @@ point, 프로젝트 밖으로 해석되는 경로, 대소문자 alias, 기존 �
 Claude Code는 `CLAUDE.md`의 `@AGENTS.md` import를 통해 같은 공통 규칙을
 읽습니다. 공통 규칙을 두 파일에 복제하지 말고 Claude 전용 지침이 실제로
 필요할 때만 import 아래에 추가합니다.
+
+일반 작업 세션은 `AGENTS.md`와 현재 `docs/STATE.md`를 먼저 읽고 init을 한 번
+실행한 뒤, `cold-start --json`으로 현재 기능 하나를 선택합니다. 전체 기능·
+Source·영수증 원장과 무관한 설계 문서를 매번 컨텍스트에 올리지 않습니다.
+
+상주 에이전트가 반복·재현 가능한 에이전트 행동, 하네스 또는 작업 루프의
+구조적 결함을 확인하면 별도 명령 없이도 저장소 내부 최소 개선을 한 번
+수행합니다. 명시적 읽기 전용·중지, 제품 동작, 외부·파괴적 작업과 Git 배포
+동작은 이 상시 권한에서 제외됩니다.
+
+하네스 철학이 오염되었는지 점검할 때는 Codex에서
+`$audit-harness-health`, Claude Code에서 `/audit-harness-health`를 호출합니다.
+정본은 Codex와 공용 Agent Skills가 탐색하는 `.agents/skills`에 있고,
+`.claude/skills`에는 같은 정본을 읽는 작은 포인터만 둡니다. 운영체제 심볼릭
+링크를 사용하지 않아 기존 설치·업그레이드·Windows reparse-point 안전 계약을
+유지합니다. 감사 자체는 읽기 전용입니다.
 
 자세한 절차는
 [`template/core/docs/harness/ADOPTION.md`](template/core/docs/harness/ADOPTION.md)에
@@ -75,8 +96,10 @@ python3 scripts/harness.py complete BOOT-001 --risk local_code
 상태를 확인하고, `.harness/evidence/`에 영수증을 쓴 뒤에만 상태를
 `passing`으로 바꿉니다. 기능의 각 검증 요구사항은 실제
 `level/command_id`에 연결되어야 하며 해당 명령이 실행되지 않으면 완료할 수
-없습니다. 최신 영수증은 현재 설정·검증 정의·추적 파일 digest, Git
-revision, OS·Python runtime identity를 다시 대조합니다. 회귀나 증거 만료가
+없습니다. schema-v4 최신 영수증은 전체 설정 provenance와 실제 실행한
+V0~Vn 계약의 별도 freshness digest, 검증 정의·추적 파일 digest, Git
+revision, OS·Python runtime identity를 다시 대조합니다. 미실행 gate와 무관한
+risk profile 변경은 영수증을 만료시키지 않습니다. 회귀나 증거 만료가
 발생하면 이전 영수증을 보존한 채 `reopen`으로 다시 엽니다.
 
 ## 스타터 자체 검증
@@ -108,6 +131,7 @@ init 멱등성, 콜드 스타트, WIP=1, 기능별 gate binding, 증거 신선�
 - POSIX shell과 네이티브 Windows PowerShell 5.1+ 시작 어댑터
 - POSIX process group과 Windows process tree의 timeout 종료
 - 원자적 상태 전환과 신선도 검사가 가능한 근거 영수증
+- Codex·Claude에서 호출하는 읽기 전용 하네스 건강 감사 Skill
 - 각 구성 요소에서 원본 자료까지 역추적 가능한 독립 Source map
 - SemVer, MIT 라이선스, NOTICE, manifest 기반 업그레이드·제거 계약
 

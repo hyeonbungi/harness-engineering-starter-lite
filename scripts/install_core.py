@@ -731,6 +731,20 @@ def upgrade(
         print("Dry run only; no files written.")
         return
 
+    manifest_transition = (
+        installed_version != next_version
+        or bool(accepted_merged)
+        or bool(accepted_removed)
+    )
+    if (
+        not replacements
+        and not additions
+        and not removals
+        and not manifest_transition
+    ):
+        print("Core is already current; no files or manifest were written.")
+        return
+
     affected_existing = [destination for _, destination in replacements] + removals
     backup_root = create_backup(
         target, "upgrade", affected_existing, manifest_path

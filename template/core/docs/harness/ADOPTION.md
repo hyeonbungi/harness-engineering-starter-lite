@@ -32,6 +32,26 @@ Claude Code loads the shared agent contract through the first non-empty line of
 notes below the import only when a concrete project need appears. `audit`
 rejects a missing or replaced import.
 
+`AGENTS.md` also routes user-facing behavior to `docs/COMMUNICATION.md`. Keep its
+Korean honorific, accessible explanation, concise evidence reporting, and
+bounded autonomous structural-improvement requirements unless the user
+explicitly replaces that contract through a reviewed change.
+
+The callable harness audit has one canonical workflow at
+`.agents/skills/audit-harness-health/SKILL.md`, where Codex and shared Agent
+Skills clients can discover it. Claude Code uses the matching small `.claude`
+pointer. The pointer is a regular managed file rather than a filesystem link,
+so Windows checkout and the reparse-point refusal contract remain unchanged.
+Invoke `$audit-harness-health` in Codex or `/audit-harness-health` in Claude Code.
+The audit is read-only; request repairs separately after reviewing its findings.
+
+If another client does not discover `.agents/skills`, add only one regular
+project-local `SKILL.md` at that client's documented discovery path. Keep the
+same `name` and `description`, direct it to read the `.agents` canonical file in
+full, and do not copy audit steps. Register the new pointer in `REQUIRED_FILES`,
+`AUDIT_SKILL_BRIDGES`, `BOOT-001.tracked_files`, the component/source ledgers,
+and the install Fixture together. Do not add a client bridge speculatively.
+
 Rejecting every reparse point is deliberately conservative. A project under a
 provider-managed mount may need a canonical local NTFS path or a reviewed manual
 install. UNC and network-filesystem atomicity are outside the automatic lifecycle
@@ -50,6 +70,8 @@ guarantee.
 6. Enable only risk profiles whose contiguous V0..Vn levels are configured.
 7. Describe actual boundaries in `docs/ARCHITECTURE.md` and current facts in
    `docs/STATE.md`.
+8. Do not add `harness.config.json` to feature `tracked_files`; schema-v4
+   receipts bind its relevant execution contract separately.
 
 Commands inherit the caller's environment. Do not store tokens, passwords, or
 private values in configuration or command arguments. The runner bounds retained
@@ -85,8 +107,9 @@ Each feature must declare its own executable checks and exact evidence inputs:
 ```
 
 Every binding must exist inside the feature's risk profile. Mutable
-`feature_list.json`, `docs/STATE.md`, evidence paths, missing files, and
-symbolic-link or Windows junction/reparse-point paths cannot be tracked.
+`harness.config.json`, `feature_list.json`, `docs/STATE.md`, evidence paths,
+missing files, and symbolic-link or Windows junction/reparse-point paths cannot
+be tracked.
 
 Keep the `harness:state` marker block in `docs/STATE.md` intact. State commands
 update only that bounded block from `feature_list.json`.
@@ -113,6 +136,19 @@ The standard path must be safe to repeat. BOOT-001 already binds the Core audit,
 two initialization runs, and the five cold-start answers to executable V0/V1
 commands.
 
+The repeated sequence above is adoption evidence, not the cost of every work step.
+For an ordinary session, read `AGENTS.md` and the current `docs/STATE.md`, run the
+platform init once, and use `cold-start --json` to select one current feature.
+Do not load the whole feature list, Source map, receipt directory, architecture,
+or validation history unless the selected work needs it. Use focused checks while
+editing and the required risk profile once at completion.
+
+For a lightweight health review, invoke `audit-harness-health`. It reads the
+current router, state and one selected feature first, runs
+`python3 scripts/harness.py audit` once, and opens larger Source, receipt and Git
+histories only to explain detected drift. It never replaces the adoption or
+completion gates.
+
 `init.ps1` checks the active virtual environment, `py -3`, `python`, and
 `python3`, selects Python 3.10+, preserves the child exit code, and temporarily
 disables Python Manager automatic installation while probing. It does not change
@@ -135,24 +171,45 @@ for adoption, such as `py -3`.
 
 `complete` is the only supported path to `passing`. It executes every level
 required by the selected risk profile, proves that all feature bindings ran,
-checks clean state, and writes a schema-v3 receipt under `.harness/evidence/`.
+checks clean state, and writes a schema-v4 receipt under `.harness/evidence/`.
+
+When a resident agent confirms a recurring or reproducible defect in agent
+behavior, the harness, or the work loop, the installed contract grants standing
+permission for one repository-local improvement without a separate command. If
+no feature is active, activate or reopen `BOOT-001`; if another feature is active,
+finish it first unless the defect blocks safety or correctness, in which case
+block it with a recovery reason. Announce the bounded change, run focused checks,
+then complete `BOOT-001`. Do not rewrite the install manifest: its old digest must
+continue to identify the intentional local customization during a later upgrade.
+Explicit read-only/stop instructions and higher-priority host policy still win.
 
 Strict audit compares the latest receipt with the current:
 
-- receipt file digest and complete schema-v3 execution structure;
-- complete `harness.config.json` digest;
+- receipt file digest and complete schema-v4 execution structure;
+- full `harness.config.json` provenance digest recorded at completion;
+- freshness digest of the executed V0..Vn gates, selected and startup risk
+  profiles, runner, project, paths, setup/start commands, startup profile, and
+  clean-state rules;
 - feature risk, verification, and tracked-path definition digest;
 - digest of every exact tracked file;
-- Git revision, when both receipt and current project are versioned.
+- Git revision, when both receipt and current project are versioned;
 - OS/platform and Python implementation/major.minor runtime identity.
 
 When Git is unavailable, exact tracked-file digests remain authoritative. A
 stale receipt blocks strict audit. Use `state reopen` with a reason and complete
 again; recovery validates old receipt structure without pretending it is fresh.
-Older receipts remain history and are not treated as current proof.
-Historical schema-v2 receipts may remain after a `0.2.x` re-verification, but
-they cannot be the newest proof because they do not bind OS/Python runtime
-identity.
+Unselected gates and unrelated risk profiles may change without invalidating a
+receipt because current audit still validates them and they did not participate
+in that completion run. Older receipts remain history and are not treated as
+current proof. Historical schema-v2 and schema-v3 receipts may remain after a
+`0.3.x` schema-v4 re-verification, but they cannot be the newest proof; v2 lacks
+runtime identity and both lack the execution-scoped configuration digest.
+
+To keep the operational feature ledger bounded, each feature retains its newest
+20 transition events and newest 5 receipt references. Older receipt files remain
+under `.harness/evidence/`, and Git remains the durable transition history. Audit
+rejects manually accumulated arrays beyond those windows rather than silently
+loading them into every future session.
 
 If the managed STATE block is damaged, repair it with:
 
@@ -175,6 +232,11 @@ Upgrade compares the manifest baseline, current project file, and incoming Core
 file. It replaces only unchanged managed files, preserves local-only changes,
 and refuses files changed on both sides. Successful changes create a recoverable
 backup under `.harness/backups/` before updating the manifest.
+
+If the installed and incoming versions match and there is no file or manifest
+baseline transition, the actual upgrade is a no-op. It preserves local-only
+customizations without rewriting the manifest, creating a timestamp, or leaving
+a backup directory.
 
 The installer refuses downgrades and major-version changes. Before `1.0.0`, it
 also refuses automatic minor-version changes because they may alter the

@@ -18,8 +18,22 @@ series.
 
 The current installer therefore accepts same-version operations and compatible
 upgrades within one release line, but refuses downgrades, major-version changes,
-and automatic pre-1.0 minor-version changes. Those transitions require a newer
-compatible installer or a separately reviewed manual adoption.
+and automatic pre-1.0 minor-version changes. A same-version operation with no
+file or manifest-baseline transition is a true no-op: it does not rewrite the
+manifest, create a backup, or add a timestamp. Incompatible transitions require
+a newer compatible installer or a separately reviewed manual adoption.
+
+Core `0.3.0` introduces schema-v4 receipts with an execution-scoped
+configuration freshness digest, bounded startup/operational context, and a
+repository-local autonomous structural-improvement contract. It also installs
+one callable read-only audit Skill and one regular Claude pointer file; no
+managed symbolic link or reparse point is introduced. Moving from
+`0.2.x` to `0.3.x` is therefore a reviewed manual adoption: preserve schema-v2/v3
+receipt files as history, merge the Core files, compact feature transition events
+to the newest 20 and receipt references to the newest 5, and re-complete active
+evidence under schema v4. Do not reinterpret an older receipt as current proof.
+Autonomous edits to managed Core files intentionally remain manifest-detectable
+local changes, so a later upgrade must preserve or manually merge them.
 
 ## License and Notice
 
@@ -109,9 +123,10 @@ project changed, the file is preserved. If both project and incoming Core
 changed, upgrade refuses before writing and identifies the current target,
 incoming `template/core/` tree, installed version, and manifest baseline.
 
-Before changing files, an upgrade must support `--dry-run` and create a
-recoverable backup containing the affected files and prior manifest. The new
-manifest is committed only after the complete upgrade succeeds. On failure,
+Before changing files or advancing a manifest baseline, an upgrade must support
+`--dry-run` and create a recoverable backup containing the affected files and
+prior manifest. A same-version no-op returns before this backup boundary. The
+new manifest is committed only after the complete upgrade succeeds. On failure,
 the tool restores the prior files and manifest. A version or manifest schema
 that the tool cannot interpret is a refusal, not a best-effort mutation.
 

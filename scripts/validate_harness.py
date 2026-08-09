@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REQUIRED_FILES = (
+    "template/core/.agents/skills/audit-harness-health/SKILL.md",
+    "template/core/.claude/skills/audit-harness-health/SKILL.md",
     "AGENTS.md",
     "CLAUDE.md",
     "LICENSE",
@@ -41,6 +43,7 @@ REQUIRED_FILES = (
     "template/core/scripts/harness.py",
     "template/core/docs/STATE.md",
     "template/core/docs/ARCHITECTURE.md",
+    "template/core/docs/COMMUNICATION.md",
     "template/core/docs/VALIDATION.md",
     "template/core/docs/harness/ADOPTION.md",
     "template/core/docs/harness/LIFECYCLE.md",

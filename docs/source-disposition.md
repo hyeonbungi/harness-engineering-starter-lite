@@ -34,18 +34,18 @@
 | SRC-CH-001 | `CHAPTER 01. 강력한 모델도 실행 신뢰성을 보장하지 않는다.md` | merged | 모델 자신감 대신 실패를 구조적으로 진단하고 실행 증거로 판단 | HC-005, HC-007 | 다섯 실패 레이어를 별도 문서로 복제하지 않고 감사·게이트·실패 진단에 통합합니다. |
 | SRC-CH-002 | `CHAPTER 02. 하네스란 실제로 무엇인가.md` | core-direct | 지시·도구·환경·상태·피드백을 함께 검사하고 명령은 안전한 인자로 실행 | HC-002, HC-005, standard:security | 명령 설정과 실행기 계약의 직접 근거입니다. 별도 보안 정책은 `standard:security`로 승격합니다. |
 | SRC-CH-003 | `CHAPTER 03. 저장소를 단일 진실 원천으로 만들어라.md` | core-direct | 저장소를 SoR로 삼고 새 세션이 다섯 콜드 스타트 질문에 답하게 함 | HC-001, HC-004, HC-006 | 라우터·현재 상태·아키텍처와 콜드 스타트 계약의 직접 근거입니다. |
-| SRC-CH-004 | `CHAPTER 04. 명령 파일을 여러 파일로 분산하라.md` | core-direct | 루트 지침을 짧은 라우터로 유지하고 세부 규칙을 가까운 문서로 점진 공개 | HC-001, HC-009, HC-012 | AGENTS 라우터·얇은 Claude 포인터·구성 요소 원장의 직접 근거입니다. 예시 프로젝트 경로는 생성하지 않습니다. |
-| SRC-CH-005 | `CHAPTER 05. 세션을 넘어 컨텍스트를 살아있게 유지하라.md` | core-direct | 기계 상태와 bounded human snapshot으로 세션 재구축 비용을 낮춤 | HC-003, HC-004, HC-014, HC-015, standard:plans | 기능 원장·현재 상태·버전 수명주기의 직접 근거입니다. 별도 계획 이력은 `standard:plans`로 보류합니다. |
+| SRC-CH-004 | `CHAPTER 04. 명령 파일을 여러 파일로 분산하라.md` | core-direct | 루트 지침을 짧은 라우터로 유지하고 세부 규칙을 가까운 문서로 점진 공개 | HC-001, HC-009, HC-012, HC-019, HC-020, HC-021 | AGENTS 라우터·얇은 Claude Skill 포인터·가까운 커뮤니케이션/감사 문서·구성 요소 원장의 직접 근거입니다. |
+| SRC-CH-005 | `CHAPTER 05. 세션을 넘어 컨텍스트를 살아있게 유지하라.md` | core-direct | 기계 상태와 bounded human snapshot으로 세션 재구축 비용을 낮춤 | HC-003, HC-004, HC-014, HC-015, HC-019, HC-020, standard:plans | 기능 원장·현재 상태·호출형 감사·커뮤니케이션 자기개선·버전 수명주기의 직접 근거입니다. 별도 계획 이력은 `standard:plans`로 보류합니다. |
 | SRC-CH-006 | `CHAPTER 06. 모든 에이전트 세션 전에 초기화하라.md` | core-direct | 멱등 초기화와 POSIX·PowerShell의 반복 가능한 프리플라이트 제공 | HC-002, HC-005, HC-010, HC-018 | 설정·검사기와 두 운영체제 진입 래퍼의 직접 근거입니다. |
-| SRC-CH-007 | `CHAPTER 07. 에이전트에게 명확한 작업 경계를 그어 주어야 합니다.md` | core-direct | 기본 WIP를 하나로 제한하고 완료 또는 명시적 차단 뒤 다음 작업 선택 | HC-003, HC-005 | 상태 전환과 WIP=1 검사의 직접 근거입니다. |
-| SRC-CH-008 | `CHAPTER 08. 기능 목록으로 에이전트의 행동을 제약하십시오.md` | core-direct | 기능 목록을 범위·상태·검증·증거의 실행 가능한 계약으로 사용 | HC-003, HC-005 | 기능 스키마와 영수증 기반 상태 전환의 직접 근거입니다. `passing` 비가역성은 현재 진실을 위해 채택하지 않습니다. |
-| SRC-CH-009 | `CHAPTER 09. 에이전트가 너무 일찍 완료를 선언하지 못하도록 방지하기.md` | core-direct | 완료 판단을 위험 기반 외부 게이트와 영수증으로 분리 | HC-005, HC-007, advanced:independent-evaluator | Core에는 단계 게이트를 직접 반영하고, 별도 평가자 역할은 고위험일 때만 승격합니다. |
-| SRC-CH-010 | `CHAPTER 10. 엔드투엔드 테스트(end-to-end testing)만이 진정한 검증이다.md` | core-direct | 경계 변경에는 E2E를 요구하고 위험이 낮은 변경은 가장 강한 적정 증거를 선택 | HC-005, HC-006, HC-007, standard:e2e | V0~V4와 황금 여정 계약의 직접 근거입니다. 고정 계층 아키텍처는 강제하지 않습니다. |
-| SRC-CH-011 | `CHAPTER 11. 에이전트의 런타임을 관측 가능하게 만들어라.md` | merged | 실행 결과와 프로세스 판단을 구조화하고 필요할 때 관측성을 점진 승격 | HC-005, HC-007, advanced:observability | Core에는 명령·영수증·실패 신호를 통합하고 메트릭·트레이스는 분산 흐름이 있을 때 보류합니다. |
-| SRC-CH-012 | `CHAPTER 12. 모든 세션은 클린 상태(clean state)로 끝나야 한다.md` | core-direct | 검증·상태·임시 산출물·재시작성·다음 행동의 클린 종료 검사 | HC-004, HC-005, HC-014, advanced:quality-ablation | 클린 상태와 안전한 제거·롤백은 Core에서 직접 검사하고 품질 추세·절제 실험은 고급 프로필로 보류합니다. |
+| SRC-CH-007 | `CHAPTER 07. 에이전트에게 명확한 작업 경계를 그어 주어야 합니다.md` | core-direct | 기본 WIP를 하나로 제한하고 완료 또는 명시적 차단 뒤 다음 작업 선택 | HC-003, HC-005, HC-019, HC-020 | 상태 전환, WIP=1 검사, 단일 자기개선 루프와 호출형 감사의 직접 근거입니다. |
+| SRC-CH-008 | `CHAPTER 08. 기능 목록으로 에이전트의 행동을 제약하십시오.md` | core-direct | 기능 목록을 범위·상태·검증·증거의 실행 가능한 계약으로 사용 | HC-003, HC-005, HC-020 | 기능 스키마·영수증 상태 전환과 감사의 상태 점검 근거입니다. `passing` 비가역성은 채택하지 않습니다. |
+| SRC-CH-009 | `CHAPTER 09. 에이전트가 너무 일찍 완료를 선언하지 못하도록 방지하기.md` | core-direct | 완료 판단을 위험 기반 외부 게이트와 영수증으로 분리 | HC-005, HC-007, HC-020, advanced:independent-evaluator | 단계 게이트와 호출형 증거 감사를 Core에 반영하고, 별도 평가자 역할은 고위험일 때만 승격합니다. |
+| SRC-CH-010 | `CHAPTER 10. 엔드투엔드 테스트(end-to-end testing)만이 진정한 검증이다.md` | core-direct | 경계 변경에는 E2E를 요구하고 위험이 낮은 변경은 가장 강한 적정 증거를 선택 | HC-005, HC-006, HC-007, HC-020, standard:e2e | V0~V4·황금 여정과 감사의 실제 증거 경계 근거입니다. 고정 계층 아키텍처는 강제하지 않습니다. |
+| SRC-CH-011 | `CHAPTER 11. 에이전트의 런타임을 관측 가능하게 만들어라.md` | merged | 실행 결과와 프로세스 판단을 구조화하고 필요할 때 관측성을 점진 승격 | HC-005, HC-007, HC-020, advanced:observability | Core에는 명령·영수증·감사 실패 신호를 통합하고 메트릭·트레이스는 분산 흐름에서만 승격합니다. |
+| SRC-CH-012 | `CHAPTER 12. 모든 세션은 클린 상태(clean state)로 끝나야 한다.md` | core-direct | 검증·상태·임시 산출물·재시작성·다음 행동의 클린 종료 검사 | HC-004, HC-005, HC-014, HC-019, HC-020, advanced:quality-ablation | 클린 상태·읽기 전용 감사·자기개선 종료·안전한 롤백은 Core에서 검사하고 품질 추세·절제 실험은 보류합니다. |
 | SRC-RES-001 | `리소스/index.md` | core-direct | 최소 팩으로 시작하고 관찰된 필요에 따라 고급 팩으로 승격 | HC-008 | Core 채택 절차와 프로필 경계의 직접 근거입니다. |
-| SRC-TPL-001 | `리소스/templates/AGENTS.md` | core-direct | 시작·작업·완료·종료를 라우팅하는 공통 에이전트 계약 | HC-001 | 설치된 AGENTS 라우터의 직접 템플릿 근거입니다. |
-| SRC-TPL-002 | `리소스/templates/CLAUDE.md` | core-direct | Claude 진입점을 제공하되 공통 규칙은 중복하지 않음 | HC-009 | 드리프트를 줄이기 위해 원문 전체 대신 `@AGENTS.md` import로 보정해 채택합니다. |
+| SRC-TPL-001 | `리소스/templates/AGENTS.md` | core-direct | 시작·작업·완료·종료를 라우팅하는 공통 에이전트 계약 | HC-001, HC-019, HC-020 | AGENTS·커뮤니케이션과 Codex/공용 호출형 감사 Skill 정본의 직접 템플릿 근거입니다. |
+| SRC-TPL-002 | `리소스/templates/CLAUDE.md` | core-direct | Claude 진입점을 제공하되 공통 규칙은 중복하지 않음 | HC-009, HC-021 | CLAUDE와 Claude Skill 진입점은 공통 정본을 가리키고 규칙을 복제하지 않습니다. |
 | SRC-TPL-003 | `리소스/templates/claude-progress.md` | core-direct | 현재 진행·증거·다음 행동을 bounded snapshot에 남김 | HC-004 | 별도 진행 파일을 추가하지 않고 STATE에 통합해 상태 중복을 막습니다. |
 | SRC-TPL-004 | `리소스/templates/clean-state-checklist.md` | core-direct | 종료 전에 검증·재시작성·미검증 작업·임시 파일을 점검 | HC-004, HC-005 | 클린 상태 감사와 STATE 일관성 검사의 직접 근거입니다. |
 | SRC-TPL-005 | `리소스/templates/evaluator-rubric.md` | deferred | 정확성·범위·신뢰성·인계를 독립적으로 평가 | advanced:independent-evaluator | Lite는 고정 게이트만 설치하고 주관적·고위험 평가가 필요할 때 루브릭을 추가합니다. |
@@ -83,7 +83,7 @@
 | SRC-ADV-021 | `리소스/openai-advanced/repo-template/docs/references/nixpacks-llms.txt` | deferred | 외부 빌드·런타임 문서를 모델 친화적 캐시로 고정 | advanced:reference-cache | Nixpacks를 실제 사용하는 프로젝트에만 적용합니다. |
 | SRC-ADV-022 | `리소스/openai-advanced/repo-template/docs/references/uv-llms.txt` | deferred | 외부 패키지·환경 문서를 모델 친화적 캐시로 고정 | advanced:reference-cache | uv를 실제 사용하는 프로젝트에만 적용합니다. |
 | SRC-ADV-023 | `리소스/openai-advanced/sops/chrome-devtools-validation-loop.md` | core-direct | 사용자 대면 UI 변경은 BEFORE·AFTER 실제 런타임 증거로 검증 | HC-005, HC-007, standard:frontend-validation | Core 위험 게이트와 VALIDATION의 직접 근거이며 브라우저 도구 설치는 UI 프로젝트에서만 추가합니다. |
-| SRC-ADV-024 | `리소스/openai-advanced/sops/encode-knowledge-into-repo.md` | merged | 외부·암묵 지식을 가장 가까운 저장소 산출물과 검사로 이동 | HC-001, HC-004, HC-006, HC-008, HC-012 | 별도 SOP를 복제하지 않고 라우팅·상태·아키텍처·채택·구성 요소 원장에 통합합니다. |
+| SRC-ADV-024 | `리소스/openai-advanced/sops/encode-knowledge-into-repo.md` | merged | 외부·암묵 지식을 가장 가까운 저장소 산출물과 검사로 이동 | HC-001, HC-004, HC-005, HC-006, HC-008, HC-012, HC-019, HC-020 | 별도 SOP를 복제하지 않고 라우팅·검사·상태·아키텍처·채택·커뮤니케이션·호출형 감사·구성 요소 원장에 통합합니다. |
 | SRC-ADV-025 | `리소스/openai-advanced/sops/index.md` | reference-only | 상황에 맞는 SOP를 선택하고 적용 범위를 확인 | standard:sop-router, HC-011, HC-013 | 원본 SOP 트리의 라우터이므로 Core 행동으로 과장하지 않고 Source 맵에서 후속 선택 경로를 보존합니다. |
 | SRC-ADV-026 | `리소스/openai-advanced/sops/layered-domain-architecture.md` | deferred | 실제 경계가 있을 때 계층 의존 방향을 문서와 검사로 강제 | HC-006, standard:architecture-boundary | Core 아키텍처 지도는 원칙을 보존하되 고정 계층은 범용 기본값과 충돌하므로 다중 도메인·경계가 관찰될 때만 적용합니다. |
 | SRC-ADV-027 | `리소스/openai-advanced/sops/observability-feedback-loop.md` | deferred | 쿼리·추론·수정·재시작·재검증을 운영 신호와 연결 | advanced:observability | 로그만으로 부족한 다단계·분산 흐름이 있을 때 메트릭·트레이스와 함께 승격합니다. |
