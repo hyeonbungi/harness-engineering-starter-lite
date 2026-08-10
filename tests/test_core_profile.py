@@ -721,7 +721,7 @@ class CoreProfileTest(unittest.TestCase):
         self.assertNotEqual(downgrade.returncode, 0)
         self.assertIn("downgrade", downgrade.stderr)
 
-        manifest["version"] = "0.0.9"
+        manifest["version"] = "0.3.9"
         manifest_path.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
@@ -980,6 +980,21 @@ class CoreProfileTest(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
         self.assertEqual((self.target / ".fixture-setup").read_text(), "ready\n")
+        for result in (first, second):
+            summary_line = next(
+                line
+                for line in result.stdout.splitlines()
+                if line.startswith("cold-start-summary: ")
+            )
+            inline_answers = json.loads(summary_line.split(": ", 1)[1])
+            self.assertEqual(
+                set(inline_answers),
+                {"what", "structure", "start", "verify", "current"},
+            )
+            self.assertEqual(
+                inline_answers["current"]["next_feature"]["id"],
+                "BOOT-001",
+            )
 
         cold = self.run_cli("cold-start", "--json")
         self.assertEqual(cold.returncode, 0, cold.stdout + cold.stderr)
@@ -992,6 +1007,128 @@ class CoreProfileTest(unittest.TestCase):
         self.assertEqual(answers["current"]["next_feature"]["id"], "BOOT-001")
         start = self.run_cli("run", "start")
         self.assertEqual(start.returncode, 0, start.stdout + start.stderr)
+
+    def test_init_reuses_audit_and_rejects_recursive_startup(self) -> None:
+        harness = self.load_harness_module("init_budget")
+        previous_guard = os.environ.pop(harness.INIT_REENTRANCY_ENV, None)
+        try:
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with mock.patch.object(
+                harness,
+                "audit_repository",
+                wraps=harness.audit_repository,
+            ) as audited:
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    result = harness.main(["init"])
+            self.assertEqual(result, 0, stdout.getvalue() + stderr.getvalue())
+            self.assertEqual(audited.call_count, 1)
+            self.assertIn("cold-start-summary: ", stdout.getvalue())
+
+            setup_stdout = io.StringIO()
+            setup_stderr = io.StringIO()
+            with mock.patch.object(
+                harness,
+                "audit_repository",
+                wraps=harness.audit_repository,
+            ) as audited_after_setup, mock.patch.object(
+                harness,
+                "run_declared_command",
+            ) as setup_command:
+                with contextlib.redirect_stdout(
+                    setup_stdout
+                ), contextlib.redirect_stderr(setup_stderr):
+                    setup_result = harness.main(["init", "--setup"])
+            self.assertEqual(
+                setup_result,
+                0,
+                setup_stdout.getvalue() + setup_stderr.getvalue(),
+            )
+            setup_command.assert_called_once()
+            self.assertEqual(audited_after_setup.call_count, 2)
+        finally:
+            if previous_guard is not None:
+                os.environ[harness.INIT_REENTRANCY_ENV] = previous_guard
+
+        guarded_environment = os.environ.copy()
+        guarded_environment[harness.INIT_REENTRANCY_ENV] = json.dumps(
+            [harness.repository_identity()]
+        )
+        guarded = self.run_cli("init", env=guarded_environment)
+        self.assertNotEqual(guarded.returncode, 0)
+        self.assertIn("another init is active", guarded.stderr)
+        self.assertIn("WHAT:", guarded.stderr)
+
+        sibling_environment = os.environ.copy()
+        sibling_environment[harness.INIT_REENTRANCY_ENV] = json.dumps(
+            [os.path.normcase(str(self.base / "different-core"))]
+        )
+        sibling = self.run_cli("init", env=sibling_environment)
+        self.assertEqual(sibling.returncode, 0, sibling.stdout + sibling.stderr)
+
+        config_path = self.target / "harness.config.json"
+        original_config = config_path.read_text(encoding="utf-8")
+        config = json.loads(original_config)
+        config["startup_profile"] = "local_code"
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        safe_startup = self.run_cli("init")
+        self.assertEqual(
+            safe_startup.returncode,
+            0,
+            safe_startup.stdout + safe_startup.stderr,
+        )
+        self.assertNotIn("Core initialization first pass", safe_startup.stdout)
+        self.assertNotIn("Core initialization repeat pass", safe_startup.stdout)
+
+        config["gates"]["V1"]["commands"].append(
+            {
+                "id": "product-init-script",
+                "name": "Product init script",
+                "argv": ["tools/init.sh"],
+                "cwd": ".",
+                "timeout_seconds": 10,
+                "execution_scope": "profile",
+                "why": "A product script with the same basename is not Core init.",
+                "fix": "Resolve only the actual repository init path.",
+            }
+        )
+        config["gates"]["V1"]["commands"].append(
+            {
+                "id": "init-path-as-data",
+                "name": "Init path as data",
+                "argv": [sys.executable, "-c", "print('data only')", "./init.sh"],
+                "cwd": ".",
+                "timeout_seconds": 10,
+                "execution_scope": "profile",
+                "why": "A data argument is not an init invocation.",
+                "fix": "Inspect interpreter argument roles before rejecting recursion.",
+            }
+        )
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        product_script = self.run_cli("audit")
+        self.assertEqual(
+            product_script.returncode,
+            0,
+            product_script.stdout + product_script.stderr,
+        )
+
+        config["gates"]["V1"]["commands"][0]["execution_scope"] = "profile"
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        recursive = self.run_cli("audit")
+        self.assertNotEqual(recursive.returncode, 0)
+        self.assertIn("can invoke init again", recursive.stderr)
+        self.assertIn("WHAT:", recursive.stderr)
+        self.assertIn("FIX:", recursive.stderr)
+        config_path.write_text(original_config, encoding="utf-8")
 
     def test_claude_entrypoint_imports_agents_and_rejects_drift(self) -> None:
         for path in (
@@ -1110,6 +1247,239 @@ class CoreProfileTest(unittest.TestCase):
 
         self.assertEqual(self.run_cli("audit").returncode, 0)
 
+    def test_agent_coordination_contract_is_installed_routed_and_enforced(self) -> None:
+        marker = "<!-- harness:agent-coordination:v1 -->"
+        handoff_fields = (
+            "task_id:",
+            "status: completed | blocked | failed",
+            "base_revision:",
+            "result_revision:",
+            "worktree_or_diff:",
+            "assigned_paths:",
+            "changed_paths:",
+            "summary:",
+            "validation:",
+            "not_run:",
+            "assumptions:",
+            "unknowns:",
+            "failures_or_conflicts:",
+            "remaining_risks:",
+            "integration_order:",
+        )
+        for root in (ROOT / "template/core", self.target):
+            agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+            contract = (root / "docs/AGENT_COORDINATION.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(marker, agents)
+            self.assertIn(marker, contract)
+            self.assertIn(
+                "복수 에이전트 또는 병렬 작업을 명시적으로 요청한 경우에만",
+                agents,
+            )
+            self.assertIn("일반 작업에서는 에이전트를 자동으로", agents)
+            self.assertIn("writer마다 별도 worktree", contract)
+            self.assertIn("소유 경로는 서로 겹치지", contract)
+            self.assertIn("lead만 갱신", contract)
+            self.assertIn("비 Git 프로젝트", contract)
+            self.assertIn("공유 상태 격리를 정의하지 않은", contract)
+            self.assertIn("lead가 직접 다시 실행", contract)
+            self.assertIn("read-only reviewer", contract)
+            self.assertIn("worker의 `status`는 하위 작업 결과만", contract)
+            self.assertIn("`passing`이나 기능의 최종", contract)
+            for field in handoff_fields:
+                self.assertIn(field, contract)
+            self.assertLess((root / "AGENTS.md").stat().st_size, 8 * 1024)
+
+        root_agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn(marker, root_agents)
+        self.assertIn("template/core/docs/AGENT_COORDINATION.md", root_agents)
+
+        components = json.loads(
+            (self.target / "docs/harness/components.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        coordination = next(
+            component
+            for component in components["components"]
+            if component["id"] == "HC-022"
+        )
+        self.assertEqual(coordination["path"], "docs/AGENT_COORDINATION.md")
+        self.assertEqual(
+            coordination["sources"],
+            [
+                "SRC-CH-007..009",
+                "SRC-TPL-001",
+                "SRC-TPL-006",
+                "SRC-TPL-010",
+                "SRC-PRJ-004",
+                "SRC-PRJ-006",
+            ],
+        )
+        manifest = json.loads(
+            (self.target / ".harness/install-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        managed = {entry["path"] for entry in manifest["files"]}
+        self.assertEqual(len(managed), 22)
+        self.assertIn("docs/AGENT_COORDINATION.md", managed)
+
+        harness = self.load_harness_module("agent_coordination")
+        for relative, required_text in harness.AGENT_COORDINATION_REQUIREMENTS.items():
+            path = self.target / relative
+            original = path.read_text(encoding="utf-8")
+            for clause in (harness.AGENT_COORDINATION_MARKER, *required_text):
+                with self.subTest(relative=relative, clause=clause):
+                    try:
+                        path.write_text(
+                            original.replace(clause, ""),
+                            encoding="utf-8",
+                        )
+                        rejected = self.run_cli("audit")
+                        self.assertNotEqual(rejected.returncode, 0)
+                        self.assertIn(
+                            "agent coordination contract drifted",
+                            rejected.stderr,
+                        )
+                        self.assertIn("WHAT:", rejected.stderr)
+                        self.assertIn("WHY:", rejected.stderr)
+                        self.assertIn("FIX:", rejected.stderr)
+                    finally:
+                        path.write_text(original, encoding="utf-8")
+
+        restored = self.run_cli("audit")
+        self.assertEqual(restored.returncode, 0, restored.stdout + restored.stderr)
+
+    @unittest.skipUnless(shutil.which("git"), "Git is not installed")
+    def test_parallel_writer_worktrees_preserve_lead_control_plane(self) -> None:
+        def git(
+            cwd: Path,
+            *args: str,
+        ) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["git", *args],
+                cwd=cwd,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        left = self.target / "worker-left.txt"
+        right = self.target / "worker-right.txt"
+        left.write_bytes(b"baseline-left\n")
+        right.write_bytes(b"baseline-right\n")
+        self.assertEqual(git(self.target, "init").returncode, 0)
+        self.assertEqual(
+            git(self.target, "config", "user.name", "Harness Fixture").returncode,
+            0,
+        )
+        self.assertEqual(
+            git(
+                self.target,
+                "config",
+                "user.email",
+                "harness-fixture@example.invalid",
+            ).returncode,
+            0,
+        )
+        self.assertEqual(git(self.target, "add", "-A").returncode, 0)
+        baseline_commit = git(self.target, "commit", "-m", "shared clean baseline")
+        self.assertEqual(
+            baseline_commit.returncode,
+            0,
+            baseline_commit.stdout + baseline_commit.stderr,
+        )
+        baseline = git(self.target, "rev-parse", "HEAD").stdout.strip()
+        self.assertTrue(baseline)
+        self.assertEqual(git(self.target, "status", "--porcelain").stdout, "")
+
+        control_paths = ("feature_list.json", "docs/STATE.md")
+
+        def control_digests() -> dict[str, str]:
+            return {
+                relative: hashlib.sha256(
+                    (self.target / relative).read_bytes()
+                ).hexdigest()
+                for relative in control_paths
+            }
+
+        control_before = control_digests()
+        left_worktree = self.base / "writer-left-worktree"
+        right_worktree = self.base / "writer-right-worktree"
+        for branch, worktree in (
+            ("fixture/writer-left", left_worktree),
+            ("fixture/writer-right", right_worktree),
+        ):
+            created = git(
+                self.target,
+                "worktree",
+                "add",
+                "-b",
+                branch,
+                str(worktree),
+                baseline,
+            )
+            self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
+            self.assertEqual(git(worktree, "rev-parse", "HEAD").stdout.strip(), baseline)
+
+        (left_worktree / left.name).write_bytes(b"baseline-left\nwriter-left\n")
+        (right_worktree / right.name).write_bytes(
+            b"baseline-right\nwriter-right\n"
+        )
+        self.assertEqual(control_digests(), control_before)
+        self.assertEqual(git(self.target, "status", "--porcelain").stdout, "")
+
+        worker_heads: list[str] = []
+        for worktree, owned_path in (
+            (left_worktree, left.name),
+            (right_worktree, right.name),
+        ):
+            self.assertEqual(git(worktree, "add", owned_path).returncode, 0)
+            committed = git(worktree, "commit", "-m", f"update {owned_path}")
+            self.assertEqual(committed.returncode, 0, committed.stdout + committed.stderr)
+            head = git(worktree, "rev-parse", "HEAD").stdout.strip()
+            worker_heads.append(head)
+            changed = {
+                line
+                for line in git(
+                    worktree,
+                    "diff",
+                    "--name-only",
+                    f"{baseline}..{head}",
+                ).stdout.splitlines()
+                if line
+            }
+            self.assertEqual(changed, {owned_path})
+            focused = git(worktree, "diff", "--check", f"{baseline}..{head}")
+            self.assertEqual(focused.returncode, 0, focused.stdout + focused.stderr)
+
+        self.assertEqual(control_digests(), control_before)
+        for head in worker_heads:
+            integrated = git(self.target, "cherry-pick", head)
+            self.assertEqual(
+                integrated.returncode,
+                0,
+                integrated.stdout + integrated.stderr,
+            )
+            focused = git(self.target, "diff", "--check", "HEAD^", "HEAD")
+            self.assertEqual(focused.returncode, 0, focused.stdout + focused.stderr)
+
+        self.assertEqual(control_digests(), control_before)
+        self.assertEqual(left.read_text(encoding="utf-8"), "baseline-left\nwriter-left\n")
+        self.assertEqual(
+            right.read_text(encoding="utf-8"),
+            "baseline-right\nwriter-right\n",
+        )
+        lead_gate = self.run_cli("audit")
+        self.assertEqual(lead_gate.returncode, 0, lead_gate.stdout + lead_gate.stderr)
+
+        for worktree in (left_worktree, right_worktree):
+            removed = git(self.target, "worktree", "remove", str(worktree))
+            self.assertEqual(removed.returncode, 0, removed.stdout + removed.stderr)
+        self.assertEqual(git(self.target, "status", "--porcelain").stdout, "")
+
     def test_callable_harness_audit_skill_is_installed_and_routed(self) -> None:
         canonical_relative = ".agents/skills/audit-harness-health/SKILL.md"
         bridge_relatives = (
@@ -1206,19 +1576,32 @@ class CoreProfileTest(unittest.TestCase):
     def test_startup_context_and_operational_history_are_bounded(self) -> None:
         agents = (self.target / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("cold-start --json", agents)
-        self.assertIn("전체 기능·Source·영수증 원장을 읽는 대신", agents)
+        self.assertIn("cold-start-summary", agents)
+        self.assertIn("일반 시작에서는 미리 읽지 않고", agents)
         self.assertIn("집중 검사를 우선", agents)
 
         harness = self.load_harness_module("bounded_context")
         self.assertEqual(
-            harness.STARTUP_CONTEXT_LIMITS,
+            harness.ALWAYS_READ_CONTEXT_LIMITS,
             {
                 "AGENTS.md": 8 * 1024,
                 "CLAUDE.md": 4 * 1024,
-                "docs/COMMUNICATION.md": 16 * 1024,
                 "docs/STATE.md": 16 * 1024,
             },
         )
+        self.assertEqual(harness.MAX_ALWAYS_READ_CONTEXT_BYTES, 12 * 1024)
+        self.assertEqual(
+            harness.ON_DEMAND_CONTEXT_LIMITS,
+            {
+                "docs/COMMUNICATION.md": 16 * 1024,
+                "docs/AGENT_COORDINATION.md": 12 * 1024,
+            },
+        )
+        always_total = sum(
+            (self.target / relative).stat().st_size
+            for relative in harness.ALWAYS_READ_CONTEXT_LIMITS
+        )
+        self.assertLessEqual(always_total, harness.MAX_ALWAYS_READ_CONTEXT_BYTES)
 
         agents_path = self.target / "AGENTS.md"
         original_agents = agents_path.read_text(encoding="utf-8")
@@ -1228,9 +1611,47 @@ class CoreProfileTest(unittest.TestCase):
         )
         oversized = self.run_cli("audit")
         self.assertNotEqual(oversized.returncode, 0)
-        self.assertIn("startup context limit", oversized.stderr)
+        self.assertIn("context limit", oversized.stderr)
         self.assertIn("do not raise the limit", oversized.stderr)
         agents_path.write_text(original_agents, encoding="utf-8")
+
+        state_path = self.target / "docs/STATE.md"
+        original_state = state_path.read_text(encoding="utf-8")
+        state_path.write_text(
+            original_state + "\n" + "s" * (6 * 1024),
+            encoding="utf-8",
+        )
+        combined = self.run_cli("audit")
+        self.assertNotEqual(combined.returncode, 0)
+        self.assertIn("always-read context", combined.stderr)
+        self.assertIn("combined limit", combined.stderr)
+        state_path.write_text(original_state, encoding="utf-8")
+
+        communication_path = self.target / "docs/COMMUNICATION.md"
+        original_communication = communication_path.read_text(encoding="utf-8")
+        communication_path.write_text(
+            original_communication.replace(
+                "온디맨드 조건을 만족할 때만",
+                "항상 읽는 경우에",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        ambiguous = self.run_cli("audit")
+        self.assertNotEqual(ambiguous.returncode, 0)
+        self.assertIn("context routing drifted", ambiguous.stderr)
+        communication_path.write_text(original_communication, encoding="utf-8")
+
+        coordination_path = self.target / "docs/AGENT_COORDINATION.md"
+        original_coordination = coordination_path.read_text(encoding="utf-8")
+        coordination_path.write_text(
+            original_coordination + "\n" + "c" * (12 * 1024),
+            encoding="utf-8",
+        )
+        oversized_on_demand = self.run_cli("audit")
+        self.assertNotEqual(oversized_on_demand.returncode, 0)
+        self.assertIn("docs/AGENT_COORDINATION.md", oversized_on_demand.stderr)
+        coordination_path.write_text(original_coordination, encoding="utf-8")
 
         feature = {"history": [], "evidence": []}
         for index in range(harness.MAX_FEATURE_HISTORY_EVENTS + 3):
@@ -1280,6 +1701,142 @@ class CoreProfileTest(unittest.TestCase):
         self.assertNotEqual(accumulated.returncode, 0)
         self.assertIn("operational window is 5", accumulated.stderr)
 
+    def test_feature_and_tracked_evidence_audit_work_is_bounded(self) -> None:
+        harness = self.load_harness_module("tracked_evidence_budget")
+        feature_path = self.target / "feature_list.json"
+        original_features = feature_path.read_text(encoding="utf-8")
+        features = json.loads(original_features)
+        features["features"] = features["features"] * (
+            harness.MAX_FEATURES // len(features["features"]) + 1
+        )
+        feature_path.write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        too_many_features = self.run_cli("audit")
+        self.assertNotEqual(too_many_features.returncode, 0)
+        self.assertIn("audit limit is 256", too_many_features.stderr)
+
+        features = json.loads(original_features)
+        features["features"][0]["tracked_files"] = [
+            "docs/ARCHITECTURE.md"
+        ] * (harness.MAX_TRACKED_FILES_PER_FEATURE + 1)
+        feature_path.write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        too_many_paths = self.run_cli("audit")
+        self.assertNotEqual(too_many_paths.returncode, 0)
+        self.assertIn("per-feature limit is 128", too_many_paths.stderr)
+
+        features = json.loads(original_features)
+        features["features"][0]["verification"] = [
+            features["features"][0]["verification"][0]
+        ] * (harness.MAX_VERIFICATION_REQUIREMENTS_PER_FEATURE + 1)
+        feature_path.write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        too_many_requirements = self.run_cli("audit")
+        self.assertNotEqual(too_many_requirements.returncode, 0)
+        self.assertIn("verification has 65 requirements", too_many_requirements.stderr)
+
+        features = json.loads(original_features)
+        features["features"][0]["sources"] = ["SRC-CH-001..012"] * 11
+        feature_path.write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        too_many_source_edges = self.run_cli("audit")
+        self.assertNotEqual(too_many_source_edges.returncode, 0)
+        self.assertIn("sources expands to", too_many_source_edges.stderr)
+        feature_path.write_text(original_features, encoding="utf-8")
+
+        with self.assertRaises(harness.HarnessFailure) as huge_source_range:
+            harness.expand_source_reference(
+                "SRC-CH-1..999999999999999999999999999999",
+                {"SRC-CH-001"},
+            )
+        self.assertIn("finite parser budget", str(huge_source_range.exception))
+
+        validator_spec = importlib.util.spec_from_file_location(
+            "bounded_root_validator",
+            ROOT / "scripts/validate_harness.py",
+        )
+        self.assertIsNotNone(validator_spec)
+        self.assertIsNotNone(validator_spec.loader)
+        validator = importlib.util.module_from_spec(validator_spec)
+        validator_spec.loader.exec_module(validator)
+        with self.assertRaises(SystemExit) as root_source_range:
+            validator.expand_source_reference("SRC-CH-1..999999999", {"SRC-CH-001"})
+        self.assertIn("finite parser budget", str(root_source_range.exception))
+
+        oversized_json = self.target / "oversized.json"
+        oversized_json.write_text(
+            "{}" + " " * harness.MAX_JSON_BYTES,
+            encoding="utf-8",
+        )
+        try:
+            with self.assertRaises(harness.HarnessFailure) as json_budget:
+                harness.read_json(oversized_json)
+            self.assertIn("JSON audit limit", str(json_budget.exception))
+        finally:
+            oversized_json.unlink()
+
+        config = json.loads(
+            (self.target / "harness.config.json").read_text(encoding="utf-8")
+        )
+        first = {
+            "id": "CACHE-A",
+            "tracked_files": ["docs/ARCHITECTURE.md"],
+        }
+        second = {
+            "id": "CACHE-B",
+            "tracked_files": ["docs/ARCHITECTURE.md"],
+        }
+        cache = harness.TrackedFileDigestCache()
+        with mock.patch.object(
+            harness,
+            "sha256_file",
+            wraps=harness.sha256_file,
+        ) as hashed:
+            harness.tracked_file_entries(config, first, cache)
+            harness.tracked_file_entries(config, second, cache)
+        self.assertEqual(hashed.call_count, 1)
+
+        with mock.patch.object(harness, "MAX_UNIQUE_TRACKED_BYTES", 1):
+            with self.assertRaises(harness.HarnessFailure) as byte_budget:
+                harness.tracked_file_entries(
+                    config,
+                    first,
+                    harness.TrackedFileDigestCache(),
+                )
+        self.assertIn("per-audit byte budget", str(byte_budget.exception))
+
+        growing_file = self.target / "growing-evidence.bin"
+        growing_file.write_bytes(b"xx")
+        with self.assertRaises(harness.HarnessFailure) as growing_hash:
+            harness.sha256_file(growing_file, expected_size=1)
+        self.assertIn("grew while it was being hashed", str(growing_hash.exception))
+
+        receipt_cache = harness.ReceiptPayloadCache()
+        config_path = self.target / "harness.config.json"
+        with mock.patch.object(
+            harness,
+            "read_bounded_json_bytes",
+            wraps=harness.read_bounded_json_bytes,
+        ) as receipt_reads:
+            receipt_cache.load(config_path, "harness.config.json")
+            receipt_cache.load(config_path, "harness.config.json")
+        self.assertEqual(receipt_reads.call_count, 1)
+        with mock.patch.object(harness, "MAX_UNIQUE_RECEIPT_BYTES_PER_AUDIT", 1):
+            with self.assertRaises(harness.HarnessFailure) as receipt_budget:
+                harness.ReceiptPayloadCache().load(
+                    config_path,
+                    "harness.config.json",
+                )
+        self.assertIn("receipt payloads exceed", str(receipt_budget.exception))
+
     def test_powershell_adapters_have_a_safe_static_contract(self) -> None:
         for path in (ROOT / "init.ps1", ROOT / "template/core/init.ps1"):
             raw = path.read_bytes()
@@ -1309,9 +1866,110 @@ class CoreProfileTest(unittest.TestCase):
         ).lower()
         self.assertIn("scripts\\validate_harness.py", root_text)
         self.assertIn('"unittest"', root_text)
+        self.assertIn("[switch]$quick", root_text)
+        self.assertIn("-not $quick.ispresent", root_text)
+        self.assertIn("pythondontwritebytecode", root_text)
+        self.assertIn(
+            "export pythondontwritebytecode=1",
+            (ROOT / "init.sh").read_text(encoding="ascii").lower(),
+        )
         self.assertIn("[switch]$setup", core_text)
         self.assertIn('"--setup"', core_text)
         self.assertIn("scripts\\harness.py", core_text)
+
+    def test_root_quick_preflight_defers_the_full_fixture_suite(self) -> None:
+        validator = self.load_validator_module("root_quick_budgets")
+        oversized_tree = self.base / "quick-tree"
+        oversized_tree.mkdir()
+        for index in range(3):
+            (oversized_tree / f"{index}.txt").write_text("x", encoding="utf-8")
+        with self.assertRaises(SystemExit) as file_budget:
+            validator.bounded_relative_files(
+                oversized_tree,
+                max_files=2,
+                max_entries=10,
+                label="test tree",
+            )
+        self.assertIn("more than 2 files", str(file_budget.exception))
+
+        changed_size = oversized_tree / "0.txt"
+        with self.assertRaises(SystemExit) as size_budget:
+            validator.bounded_sha256(changed_size, 0, "test file")
+        self.assertIn("size changed", str(size_budget.exception))
+
+        started = time.monotonic()
+        _, _, _, timed_out = validator.run_bounded_subprocess(
+            [sys.executable, "-c", "import time; time.sleep(5)"],
+            cwd=self.base,
+            timeout_seconds=0.1,
+            max_output_bytes=1024,
+        )
+        self.assertTrue(timed_out)
+        self.assertLess(time.monotonic() - started, 2)
+        return_code, output, truncated, timed_out = validator.run_bounded_subprocess(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.write('x' * 100000); raise SystemExit(3)",
+            ],
+            cwd=self.base,
+            timeout_seconds=5,
+            max_output_bytes=1024,
+        )
+        self.assertEqual(return_code, 3)
+        self.assertTrue(truncated)
+        self.assertFalse(timed_out)
+        self.assertLessEqual(len(output.encode("utf-8")), 1024)
+
+        quick_orphan = self.base / "quick-orphan"
+        child = (
+            "import time; from pathlib import Path; "
+            f"time.sleep(1.5); Path({str(quick_orphan)!r}).write_text('orphan')"
+        )
+        parent = (
+            "import subprocess,sys; "
+            f"subprocess.Popen([sys.executable, '-c', {child!r}])"
+        )
+        return_code, _, _, timed_out = validator.run_bounded_subprocess(
+            [sys.executable, "-c", parent],
+            cwd=self.base,
+            timeout_seconds=5,
+            max_output_bytes=1024,
+        )
+        self.assertEqual(return_code, 0)
+        self.assertFalse(timed_out)
+        time.sleep(0.8)
+        self.assertFalse(quick_orphan.exists())
+
+        environment = os.environ.copy()
+        environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + environment.get(
+            "PATH", ""
+        )
+        if os.name == "nt":
+            powershell = shutil.which("pwsh") or shutil.which("powershell")
+            if powershell is None:
+                self.fail("native Windows verification requires PowerShell 5.1+")
+            command = [
+                powershell,
+                "-NoProfile",
+                "-File",
+                str(ROOT / "init.ps1"),
+                "-Quick",
+            ]
+        else:
+            command = ["./init.sh", "--quick"]
+        result = subprocess.run(
+            command,
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Quick baseline healthy", result.stdout)
+        self.assertNotIn("test_agent_coordination_contract", result.stdout)
+        self.assertNotIn("Ran 47 tests", result.stderr)
 
     def test_root_validator_normalizes_windows_component_paths(self) -> None:
         validator = self.load_validator_module("windows_component_paths")
@@ -1630,6 +2288,7 @@ class CoreProfileTest(unittest.TestCase):
                 config,
                 "local_code",
                 ["V0", "V1"],
+                self.feature("BOOT-001"),
             ),
         )
 
@@ -1659,6 +2318,113 @@ class CoreProfileTest(unittest.TestCase):
             "executed configuration contract changed",
             stale_profile.stderr,
         )
+
+    def test_complete_selects_only_profile_and_bound_feature_gates(self) -> None:
+        def scoped_command(command_id: str, sentinel_name: str) -> dict[str, object]:
+            return {
+                "id": command_id,
+                "name": command_id,
+                "argv": [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from pathlib import Path; "
+                        f"Path({sentinel_name!r}).write_text('ran\\n')"
+                    ),
+                ],
+                "cwd": ".",
+                "timeout_seconds": 10,
+                "max_output_bytes": 4096,
+                "execution_scope": "feature",
+                "why": "Only the binding feature should execute this focused gate.",
+                "fix": "Restore exact feature binding and scope selection.",
+            }
+
+        feature_a_file = self.target / "feature-a.txt"
+        feature_b_file = self.target / "feature-b.txt"
+        feature_a_file.write_text("a\n", encoding="utf-8")
+        feature_b_file.write_text("b\n", encoding="utf-8")
+        command_a = scoped_command("feature-a-gate", "feature-a.ran")
+        command_b = scoped_command("feature-b-gate", "feature-b.ran")
+        self.append_gate_command("V1", command_a)
+        self.append_gate_command("V1", command_b)
+        self.append_feature(
+            "FEATURE-A",
+            command_id="feature-a-gate",
+            tracked_file="feature-a.txt",
+        )
+        self.append_feature(
+            "FEATURE-B",
+            command_id="feature-b-gate",
+            tracked_file="feature-b.txt",
+        )
+
+        activated = self.run_cli("state", "activate", "FEATURE-A")
+        self.assertEqual(activated.returncode, 0, activated.stdout + activated.stderr)
+        completed = self.run_cli("complete", "FEATURE-A", "--risk", "local_code")
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertTrue((self.target / "feature-a.ran").is_file())
+        self.assertFalse((self.target / "feature-b.ran").exists())
+
+        feature_a = self.feature("FEATURE-A")
+        receipt = json.loads(
+            (self.target / feature_a["evidence"][-1]["receipt"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        executed_ids = [record["command_id"] for record in receipt["executed"]]
+        self.assertIn("feature-a-gate", executed_ids)
+        self.assertIn("fixture-v1", executed_ids)
+        self.assertNotIn("feature-b-gate", executed_ids)
+        self.assertNotIn("core-init-first", executed_ids)
+        self.assertNotIn("core-init-repeat", executed_ids)
+        self.assertNotIn("core-cold-start", executed_ids)
+
+        harness = self.load_harness_module("gate_scope_selection")
+        config_path = self.target / "harness.config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        profile_ids = {
+            command["id"]
+            for _, command in harness.selected_gate_commands(
+                config,
+                ["V0", "V1"],
+                purpose="profile",
+            )
+        }
+        self.assertNotIn("feature-a-gate", profile_ids)
+        self.assertNotIn("feature-b-gate", profile_ids)
+        self.assertNotIn("core-init-first", profile_ids)
+        self.assertIn("fixture-v1", profile_ids)
+        (self.target / "feature-a.ran").unlink()
+        verified = self.run_cli("verify", "--risk", "local_code")
+        self.assertEqual(
+            verified.returncode,
+            0,
+            verified.stdout + verified.stderr,
+        )
+        self.assertFalse((self.target / "feature-a.ran").exists())
+        self.assertFalse((self.target / "feature-b.ran").exists())
+
+        for command in config["gates"]["V1"]["commands"]:
+            if command["id"] == "feature-b-gate":
+                command["why"] = "Unrelated feature B changed."
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        unrelated = self.run_cli("audit")
+        self.assertEqual(unrelated.returncode, 0, unrelated.stdout + unrelated.stderr)
+
+        for command in config["gates"]["V1"]["commands"]:
+            if command["id"] == "feature-a-gate":
+                command["why"] = "Executed feature A changed."
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        stale = self.run_cli("audit")
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertIn("executed configuration contract changed", stale.stderr)
 
     def test_receipt_freshness_rejects_another_platform_runtime(self) -> None:
         self.assertEqual(
@@ -1956,6 +2722,35 @@ class CoreProfileTest(unittest.TestCase):
         time.sleep(1)
         self.assertFalse(sentinel.exists())
 
+    def test_runner_cleans_a_parent_that_leaves_a_pipe_holding_child(self) -> None:
+        sentinel = self.base / "orphan-after-parent-exit"
+        child = (
+            "import time; from pathlib import Path; "
+            f"time.sleep(1.5); Path({str(sentinel)!r}).write_text('orphan')"
+        )
+        parent = (
+            "import subprocess,sys; "
+            f"subprocess.Popen([sys.executable, '-c', {child!r}])"
+        )
+        self.set_gate_commands(
+            "V2",
+            [
+                {
+                    "id": "exited-parent-gate",
+                    "name": "exited parent gate",
+                    "argv": [sys.executable, "-c", parent],
+                    "cwd": ".",
+                    "timeout_seconds": 5,
+                    "why": "A successful parent must not abandon inherited descendants.",
+                    "fix": "Wait for or explicitly shut down every child process.",
+                }
+            ],
+        )
+        result = self.run_cli("verify", "--risk", "runtime_change")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        time.sleep(0.8)
+        self.assertFalse(sentinel.exists())
+
     def test_runner_rejects_cwd_outside_the_project(self) -> None:
         self.set_gate_commands(
             "V2",
@@ -2013,6 +2808,269 @@ class CoreProfileTest(unittest.TestCase):
         self.assertIn("[REDACTED]", result.stderr)
         self.assertNotIn(secret, result.stderr)
 
+    def test_runner_preflights_aggregate_budgets_and_combined_output(self) -> None:
+        harness = self.load_harness_module("aggregate_runner_budgets")
+        self.assertEqual(harness.DEFAULT_MAX_GATE_COMMANDS_PER_RUN, 32)
+        self.assertEqual(harness.DEFAULT_MAX_GATE_TIMEOUT_SECONDS_PER_RUN, 1800)
+        self.assertEqual(harness.DEFAULT_MAX_COMBINED_OUTPUT_BYTES, 128 * 1024)
+        config_path = self.target / "harness.config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+
+        profileless = json.loads(json.dumps(config))
+        profileless["gates"]["V1"]["commands"] = [
+            command
+            for command in profileless["gates"]["V1"]["commands"]
+            if command.get("execution_scope", "profile") == "feature"
+        ]
+        with mock.patch.object(harness.subprocess, "Popen") as popen:
+            with self.assertRaises(harness.HarnessFailure) as empty_profile:
+                harness.run_gates(
+                    profileless,
+                    {},
+                    "local_code",
+                    purpose="profile",
+                    repository_already_audited=True,
+                )
+        self.assertIn("no profile-scope commands", str(empty_profile.exception))
+        popen.assert_not_called()
+
+        extra_profile = gate_command("V1")
+        extra_profile["id"] = "fixture-v1-extra"
+        config["gates"]["V1"]["commands"].append(extra_profile)
+
+        config["runner"]["max_gate_commands_per_run"] = 1
+        with mock.patch.object(harness.subprocess, "Popen") as popen:
+            with self.assertRaises(harness.HarnessFailure) as command_error:
+                harness.run_gates(
+                    config,
+                    {},
+                    "local_code",
+                    purpose="profile",
+                    repository_already_audited=True,
+                )
+        self.assertIn("external commands", str(command_error.exception))
+        popen.assert_not_called()
+
+        config["runner"]["max_gate_commands_per_run"] = 32
+        config["runner"]["max_gate_timeout_seconds_per_run"] = 1
+        with mock.patch.object(harness.subprocess, "Popen") as popen:
+            with self.assertRaises(harness.HarnessFailure) as timeout_error:
+                harness.run_gates(
+                    config,
+                    {},
+                    "local_code",
+                    purpose="profile",
+                    repository_already_audited=True,
+                )
+        self.assertIn("timeouts total", str(timeout_error.exception))
+        popen.assert_not_called()
+
+        config["runner"]["max_gate_timeout_seconds_per_run"] = 900
+        config["runner"]["max_combined_output_bytes"] = 2048
+        noisy_failure = {
+            "id": "combined-output",
+            "name": "combined output",
+            "argv": [
+                sys.executable,
+                "-c",
+                (
+                    "import sys; "
+                    "sys.stdout.write('A' * 10000); "
+                    "sys.stderr.write('B' * 10000); "
+                    "raise SystemExit(7)"
+                ),
+            ],
+            "cwd": ".",
+            "timeout_seconds": 5,
+            "max_output_bytes": 10 * 1024 * 1024,
+            "why": "Both retained streams must share one finite output budget.",
+            "fix": "Inspect the bounded tails instead of returning the full log.",
+        }
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(harness.HarnessFailure) as output_error:
+                harness.execute_gate_command(config, "V2", noisy_failure)
+        rendered = str(output_error.exception)
+        self.assertIn("STDOUT (bounded tail)", rendered)
+        self.assertIn("STDERR (bounded tail)", rendered)
+        self.assertGreaterEqual(rendered.count("truncated"), 2)
+        self.assertLess(len(rendered.encode("utf-8")), 6 * 1024)
+
+        finite_output = dict(noisy_failure)
+        finite_output["id"] = "finite-combined-output"
+        finite_output["argv"] = [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "sys.stdout.write('A' * 100000); "
+                "sys.stderr.write('B' * 100000)"
+            ),
+        ]
+        with contextlib.redirect_stdout(io.StringIO()):
+            finite_record = harness.execute_gate_command(config, "V2", finite_output)
+        self.assertEqual(finite_record["exit_code"], 0)
+        self.assertTrue(finite_record["output_truncated"])
+        self.assertFalse(finite_record["timed_out"])
+
+        compatible = json.loads(config_path.read_text(encoding="utf-8"))
+        for field in (
+            "max_gate_commands_per_run",
+            "max_gate_timeout_seconds_per_run",
+            "max_combined_output_bytes",
+        ):
+            compatible["runner"].pop(field, None)
+        config_path.write_text(
+            json.dumps(compatible, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        legacy_shape = self.run_cli("audit")
+        self.assertEqual(
+            legacy_shape.returncode,
+            0,
+            legacy_shape.stdout + legacy_shape.stderr,
+        )
+
+        overconfigured = json.loads(config_path.read_text(encoding="utf-8"))
+        overconfigured["gates"]["V4"]["commands"] = [
+            gate_command("V4")
+            for _ in range(harness.MAX_GATE_COMMANDS_PER_LEVEL + 1)
+        ]
+        config_path.write_text(
+            json.dumps(overconfigured, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        too_many_declared = self.run_cli("audit")
+        self.assertNotEqual(too_many_declared.returncode, 0)
+        self.assertIn("commands has 257 entries", too_many_declared.stderr)
+
+        overconfigured = json.loads(config_path.read_text(encoding="utf-8"))
+        overconfigured["gates"]["V4"]["commands"] = [gate_command("V4")]
+        overconfigured["gates"]["V4"]["commands"][0]["argv"] = [
+            "x"
+        ] * (harness.MAX_ARGV_ITEMS + 1)
+        config_path.write_text(
+            json.dumps(overconfigured, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        oversized_argv = self.run_cli("audit")
+        self.assertNotEqual(oversized_argv.returncode, 0)
+        self.assertIn("argv has 65 items", oversized_argv.stderr)
+
+        bounded_start = json.loads(
+            (self.target / "harness.config.json").read_text(encoding="utf-8")
+        )
+        bounded_start["gates"]["V4"]["commands"] = [gate_command("V4")]
+        bounded_start["commands"]["start"]["argv"] = [
+            sys.executable,
+            "x" * 20000,
+        ]
+        config_path.write_text(
+            json.dumps(bounded_start, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        oversized_cold_start = self.run_cli("cold-start", "--json")
+        self.assertNotEqual(oversized_cold_start.returncode, 0)
+        self.assertIn("cold-start output", oversized_cold_start.stderr)
+
+        nan_config = json.loads(json.dumps(config))
+        nan_config["runner"]["default_timeout_seconds"] = float("nan")
+        config_path.write_text(
+            json.dumps(nan_config, ensure_ascii=False, indent=2, allow_nan=True) + "\n",
+            encoding="utf-8",
+        )
+        nonfinite = self.run_cli("audit")
+        self.assertNotEqual(nonfinite.returncode, 0)
+        self.assertIn("non-finite JSON number", nonfinite.stderr)
+
+    def test_execution_contract_digest_and_git_queries_are_bounded(self) -> None:
+        harness = self.load_harness_module("execution_contract_budget")
+        config = json.loads(
+            (self.target / "harness.config.json").read_text(encoding="utf-8")
+        )
+        feature = self.feature("BOOT-001")
+        explicit_defaults = json.loads(json.dumps(config))
+        explicit_defaults["runner"].update(
+            {
+                "max_gate_commands_per_run": harness.DEFAULT_MAX_GATE_COMMANDS_PER_RUN,
+                "max_gate_timeout_seconds_per_run": (
+                    harness.DEFAULT_MAX_GATE_TIMEOUT_SECONDS_PER_RUN
+                ),
+                "max_combined_output_bytes": harness.DEFAULT_MAX_COMBINED_OUTPUT_BYTES,
+            }
+        )
+        explicit_digest = harness.execution_config_digest(
+            explicit_defaults,
+            "local_code",
+            ["V0", "V1"],
+            feature,
+        )
+        omitted_defaults = json.loads(json.dumps(explicit_defaults))
+        for field in (
+            "max_gate_commands_per_run",
+            "max_gate_timeout_seconds_per_run",
+            "max_combined_output_bytes",
+        ):
+            omitted_defaults["runner"].pop(field)
+        self.assertEqual(
+            explicit_digest,
+            harness.execution_config_digest(
+                omitted_defaults,
+                "local_code",
+                ["V0", "V1"],
+                feature,
+            ),
+        )
+        self.assertEqual(harness.EXECUTION_CONTRACT_VERSION, 2)
+
+        revision_cache = harness.GitRevisionCache()
+        with mock.patch.object(harness, "current_revision", return_value="head"):
+            with mock.patch.object(
+                harness,
+                "revision_is_current_or_ancestor",
+                return_value=True,
+            ) as ancestry:
+                for index in range(33):
+                    self.assertTrue(
+                        revision_cache.is_current_or_ancestor(f"revision-{index}")
+                    )
+        self.assertEqual(ancestry.call_count, 33)
+        expired_cache = harness.GitRevisionCache()
+        expired_cache.deadline = time.monotonic() - 1
+        with self.assertRaises(harness.HarnessFailure) as git_budget:
+            expired_cache.is_current_or_ancestor("revision")
+        self.assertIn("wall-clock budget", str(git_budget.exception))
+
+        self.assertEqual(
+            self.run_cli("state", "activate", "BOOT-001").returncode,
+            0,
+        )
+        completed = self.run_cli("complete", "BOOT-001", "--risk", "local_code")
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        features = self.read_features()
+        boot = next(item for item in features["features"] if item["id"] == "BOOT-001")
+        evidence = boot["evidence"][-1]
+        receipt_path = self.target / evidence["receipt"]
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        with mock.patch.object(harness, "EXECUTION_CONTRACT_VERSION", 1):
+            receipt["execution_config_sha256"] = harness.execution_config_digest(
+                config,
+                "local_code",
+                ["V0", "V1"],
+                boot,
+            )
+        receipt_path.write_text(
+            json.dumps(receipt, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        evidence["receipt_sha256"] = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        (self.target / "feature_list.json").write_text(
+            json.dumps(features, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        stale_contract = self.run_cli("audit")
+        self.assertNotEqual(stale_contract.returncode, 0)
+        self.assertIn("executed configuration contract changed", stale_contract.stderr)
+
     @unittest.skipUnless(shutil.which("git"), "Git is not installed")
     def test_receipt_revision_must_be_current_or_an_ancestor(self) -> None:
         def git(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -2069,6 +3127,9 @@ class CoreProfileTest(unittest.TestCase):
         self.assertEqual(self.feature("BOOT-001")["status"], "active")
 
         leftover.unlink()
+        excluded_leftover = self.target / "node_modules" / "dependency.tmp"
+        excluded_leftover.parent.mkdir()
+        excluded_leftover.write_text("dependency cache\n", encoding="utf-8")
         complete = self.run_cli("complete", "BOOT-001", "--risk", "high_risk")
         self.assertEqual(complete.returncode, 0, complete.stdout + complete.stderr)
         receipt_path = self.target / self.feature("BOOT-001")["evidence"][0]["receipt"]
@@ -2077,6 +3138,49 @@ class CoreProfileTest(unittest.TestCase):
         self.assertEqual(receipt["skipped_levels"], [])
         gate_log = (self.target / ".harness/gates.log").read_text(encoding="utf-8")
         self.assertIn("V4\n", gate_log)
+
+        harness = self.load_harness_module("clean_scan_budget")
+        config = json.loads(
+            (self.target / "harness.config.json").read_text(encoding="utf-8")
+        )
+        features = self.read_features()
+        synthetic_entries = [
+            (self.target / name, True) for name in ("a", "b", "c")
+        ]
+        with mock.patch.object(harness, "MAX_CLEAN_STATE_SCAN_ENTRIES", 2):
+            with mock.patch.object(
+                harness,
+                "iter_clean_state_entries",
+                return_value=synthetic_entries,
+            ):
+                with self.assertRaises(harness.HarnessFailure) as scan_budget:
+                    harness.validate_clean_state(config, features)
+        self.assertIn("clean-state scan exceeded", str(scan_budget.exception))
+
+        with mock.patch.object(
+            harness.os,
+            "scandir",
+            side_effect=PermissionError("denied"),
+        ):
+            with self.assertRaises(harness.HarnessFailure) as unreadable:
+                harness.validate_clean_state(config, features)
+        self.assertIn("silently skipped subtrees", str(unreadable.exception))
+
+        long_offenders = [
+            (self.target / (("x" * 100) + f"-{index}.tmp"), True)
+            for index in range(100)
+        ]
+        with mock.patch.object(harness, "MAX_CLEAN_STATE_REPORTED_BYTES", 256):
+            with mock.patch.object(
+                harness,
+                "iter_clean_state_entries",
+                return_value=long_offenders,
+            ):
+                with self.assertRaises(harness.HarnessFailure) as bounded_offenders:
+                    harness.validate_clean_state(config, features)
+        rendered_offenders = str(bounded_offenders.exception)
+        self.assertIn("more omitted", rendered_offenders)
+        self.assertLess(len(rendered_offenders.encode("utf-8")), 1024)
 
     def test_completion_cannot_downgrade_declared_risk(self) -> None:
         features = self.read_features()
@@ -2202,10 +3306,15 @@ class CoreProfileTest(unittest.TestCase):
             taskkill_calls.append(argv)
             return SimpleNamespace(returncode=1)
 
+        def fake_signal_sender(pid: int, value: int) -> None:
+            self.assertEqual(pid, process.pid)
+            process.events.append(("signal", value))
+
         harness_module.terminate_process_tree(
             process,
             platform_name="nt",
             taskkill_runner=failed_taskkill,
+            signal_sender=fake_signal_sender,
         )
         self.assertTrue(taskkill_calls)
         taskkill_argv = taskkill_calls[0]

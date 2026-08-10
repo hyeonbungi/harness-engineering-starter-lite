@@ -45,8 +45,8 @@
   설명하고, 결론과 현재 상태를 먼저 간결하게 전달합니다.
 - 사실·추론·제안과 구현·검증·커밋·푸시·배포 상태를 구분합니다.
 - 표·흐름도·트리는 관계나 순서를 실제로 더 쉽게 만들 때만 사용합니다.
-- 복잡한 보고나 자기개선 판단에는 `docs/COMMUNICATION.md`의 상세 자기점검을
-  적용합니다.
+- `docs/COMMUNICATION.md`는 일반 시작에서는 미리 읽지 않고, 복잡한 보고·
+  자기개선 판단 또는 현재 작업과 직접 관련된 경우에만 읽고 적용합니다.
 
 ## 시작 순서
 
@@ -56,9 +56,9 @@
 2. `docs/STATE.md`에서 현재 검증 상태와 다음 행동을 읽습니다.
 3. POSIX에서는 `./init.sh`, Windows PowerShell에서는 `.\init.ps1`을 한 번
    실행합니다.
-4. 전체 기능·Source·영수증 원장을 읽는 대신
-   `scripts/harness.py cold-start --json`으로 현재 기능을 찾고,
-   `feature_list.json`에서는 그 기능 레코드만 확인합니다.
+4. init 출력의 bounded `cold-start-summary`에서 현재 기능을 찾고, 전체 기능·
+   Source·영수증 원장 대신 `feature_list.json`의 그 기능 레코드만 확인합니다.
+   별도 `cold-start --json`은 기계 재조회가 필요한 경우에만 실행합니다.
 5. 변경 대상과 직접 관련된 `docs/ARCHITECTURE.md`, `docs/VALIDATION.md` 또는
    `docs/COMMUNICATION.md`만 추가로 읽습니다.
 
@@ -84,6 +84,15 @@
 - 구현 중에는 변경과 연결된 집중 검사를 우선하고, 필요한 전체 위험 게이트는
   완료 시 한 번 실행합니다.
 
+<!-- harness:agent-coordination:v1 -->
+## 복수 에이전트 작업
+
+사용자가 복수 에이전트 또는 병렬 작업을 명시적으로 요청한 경우에만
+`docs/AGENT_COORDINATION.md`를 읽습니다. 일반 작업에서는 에이전트를 자동으로
+생성하지 않습니다. 병렬 worker는 하나의 active 기능 아래에서 문서의 격리·
+소유권·인계·lead 직렬 통합 계약을 따릅니다. lead는 가장 작은 worker 수만
+사용하고 worker는 하위 에이전트를 생성하지 않습니다.
+
 ## 상태와 문서
 
 - `harness.config.json`: 안전한 명령 배열과 위험별 검증 프로필
@@ -92,6 +101,7 @@
 - `docs/ARCHITECTURE.md`: 시스템 지도와 의존성 경계
 - `docs/VALIDATION.md`: 단계별 완료 게이트와 황금 여정
 - `docs/COMMUNICATION.md`: 사용자 설명·시각화·증거 보고·자기점검 계약
+- `docs/AGENT_COORDINATION.md`: 요청된 병렬 작업의 격리·소유권·인계·통합 계약
 - `docs/harness/components.json`: 하네스 구성 요소와 근거
 
 ## 완료 기준

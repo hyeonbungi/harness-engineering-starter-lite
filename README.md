@@ -20,6 +20,8 @@
 - [`template/core/`](template/core/): 실제 프로젝트에 복제할 Core 프로필
 - [`template/core/docs/COMMUNICATION.md`](template/core/docs/COMMUNICATION.md):
   설치된 상주 에이전트의 한국어 설명·증거 보고·자기점검 계약
+- [`template/core/docs/AGENT_COORDINATION.md`](template/core/docs/AGENT_COORDINATION.md):
+  명시적으로 요청된 병렬 작업의 worktree·소유권·인계·직렬 통합 계약
 - [`template/core/.agents/skills/audit-harness-health/SKILL.md`](template/core/.agents/skills/audit-harness-health/SKILL.md):
   복제 프로젝트가 호출하는 읽기 전용 하네스 건강 감사 정본
 - [`scripts/install_core.py`](scripts/install_core.py): 설치 원장 기반 설치·업그레이드·제거 도구
@@ -43,7 +45,7 @@ Windows PowerShell에서는 같은 명령의 `python3` 대신 설치된 Python
 설치기는 입력 대상과 관리 경로의 심볼릭 링크·Windows junction/reparse
 point, 프로젝트 밖으로 해석되는 경로, 대소문자 alias, 기존 파일이나 막힌
 상위 경로를 쓰기 전에 거부합니다. 성공하면
-`.harness/install-manifest.json`에 버전과 21개 관리 파일 digest를 기록합니다.
+`.harness/install-manifest.json`에 버전과 22개 관리 파일 digest를 기록합니다.
 업그레이드와 제거는 이 원장에서 소유권과 로컬 변경 여부를 증명할 수 있는
 파일만 다룹니다. 같은 버전에서 실제 파일·원장 전환이 없는 upgrade는
 manifest나 백업을 새로 쓰지 않습니다.
@@ -56,16 +58,25 @@ manifest나 백업을 새로 쓰지 않습니다.
    `docs/VALIDATION.md`의 플레이스홀더를 교체합니다.
 4. POSIX에서는 `./init.sh --setup`, Windows PowerShell에서는
    `.\init.ps1 -Setup`을 실행한 뒤 같은 어댑터를 한 번 더 실행합니다.
-5. 어댑터가 선택한 Python으로 `scripts/harness.py cold-start --json`을
-   실행해 다섯 가지 콜드 스타트 답변을 확인합니다.
+5. init의 `cold-start-summary`에서 다섯 가지 답변을 확인합니다. 별도
+   `scripts/harness.py cold-start --json`은 기계 재조회가 필요할 때 사용합니다.
 
 Claude Code는 `CLAUDE.md`의 `@AGENTS.md` import를 통해 같은 공통 규칙을
 읽습니다. 공통 규칙을 두 파일에 복제하지 말고 Claude 전용 지침이 실제로
 필요할 때만 import 아래에 추가합니다.
 
 일반 작업 세션은 `AGENTS.md`와 현재 `docs/STATE.md`를 먼저 읽고 init을 한 번
-실행한 뒤, `cold-start --json`으로 현재 기능 하나를 선택합니다. 전체 기능·
-Source·영수증 원장과 무관한 설계 문서를 매번 컨텍스트에 올리지 않습니다.
+실행한 뒤, 같은 출력의 bounded summary에서 현재 기능 하나를 선택합니다.
+전체 기능·Source·영수증 원장과 무관한 설계 문서를 매번 컨텍스트에 올리지
+않습니다.
+
+복수 에이전트나 병렬 작업을 사용자가 명시적으로 요청한 경우에만
+`docs/AGENT_COORDINATION.md`를 추가로 읽습니다. 병렬 writer는 공통의 깨끗한
+Git revision에서 각자 worktree와 겹치지 않는 소유 경로를 사용하고, lead만
+상태 원장과 통합 checkout을 갱신합니다. 격리할 수 없으면 쓰기는 직렬화하며,
+`cross_component`와 `high_risk` 통합본은 별도의 읽기 전용 reviewer가
+검토합니다. 기본 동시 worker 2명, 위임 깊이 0, worker별 2 round, review
+1회와 유한 timeout·context·token/handoff 예산을 넘을 수 없습니다.
 
 상주 에이전트가 반복·재현 가능한 에이전트 행동, 하네스 또는 작업 루프의
 구조적 결함을 확인하면 별도 명령 없이도 저장소 내부 최소 개선을 한 번
@@ -96,13 +107,28 @@ python3 scripts/harness.py complete BOOT-001 --risk local_code
 상태를 확인하고, `.harness/evidence/`에 영수증을 쓴 뒤에만 상태를
 `passing`으로 바꿉니다. 기능의 각 검증 요구사항은 실제
 `level/command_id`에 연결되어야 하며 해당 명령이 실행되지 않으면 완료할 수
-없습니다. schema-v4 최신 영수증은 전체 설정 provenance와 실제 실행한
-V0~Vn 계약의 별도 freshness digest, 검증 정의·추적 파일 digest, Git
-revision, OS·Python runtime identity를 다시 대조합니다. 미실행 gate와 무관한
+없습니다. profile 검증은 profile-scope 명령만 실행하고, 완료는 해당 기능이
+bind한 feature-scope 명령만 추가합니다. schema-v4 최신 영수증은 전체 설정
+provenance, 실제 실행한 V0~Vn 계약의 별도 freshness digest, 선택 risk
+profile, 유효 runner 기본값과 실행-contract version, 검증 정의·추적 파일
+digest, Git revision, OS·Python runtime identity를 다시 대조합니다. 미실행
+gate와 무관한
 risk profile 변경은 영수증을 만료시키지 않습니다. 회귀나 증거 만료가
 발생하면 이전 영수증을 보존한 채 `reopen`으로 다시 엽니다.
 
 ## 스타터 자체 검증
+
+일반 개발 세션의 빠른 시작은 정적 원장과 copy-ready Core audit까지만
+실행합니다. live Source와 22개 Core 파일 탐색은 기대 개수에서 중단되는
+streaming 검사이고, Core self-audit에는 15초 watchdog과 64 KiB 진단 tail을
+둡니다.
+
+```bash
+./init.sh --quick
+```
+
+Windows PowerShell에서는 `.\init.ps1 -Quick`을 사용합니다. 종료·CI·릴리스의
+전체 배포 검증은 기존 기본 명령을 유지합니다.
 
 ```bash
 ./init.sh
@@ -110,7 +136,7 @@ risk profile 변경은 영수증을 만료시키지 않습니다. 회귀나 증�
 
 Windows PowerShell에서는 `.\init.ps1`을 사용합니다.
 
-이 명령은 Core 구조·65개 근거 원장과 동적 빈 Fixture 설치를 검증합니다.
+전체 명령은 Core 구조·65개 근거 원장과 동적 빈 Fixture 설치를 검증합니다.
 Fixture는 설치·업그레이드·제거와 link/junction 경계, 설정 오류, 운영체제별
 init 멱등성, 콜드 스타트, WIP=1, 기능별 gate binding, 증거 신선도, 상태
 회귀·동기화, timeout·bounded/redacted 로그, 클린 상태와 V0~V4 영수증을
@@ -132,13 +158,15 @@ init 멱등성, 콜드 스타트, WIP=1, 기능별 gate binding, 증거 신선�
 - POSIX process group과 Windows process tree의 timeout 종료
 - 원자적 상태 전환과 신선도 검사가 가능한 근거 영수증
 - Codex·Claude에서 호출하는 읽기 전용 하네스 건강 감사 Skill
+- 명시적으로 요청된 병렬 작업을 위한 도구 중립적 안전 계약
 - 각 구성 요소에서 원본 자료까지 역추적 가능한 독립 Source map
 - SemVer, MIT 라이선스, NOTICE, manifest 기반 업그레이드·제거 계약
 
 아직 포함하지 않음:
 
 - 특정 언어·패키지 관리자·CI 제공자
-- 멀티 에이전트 오케스트레이터와 독립 평가자
+- 팀 생성·메시징·claim·lease를 수행하는 멀티 에이전트 오케스트레이터
+- 모든 작업에 상시 적용되는 독립 평가자·루브릭
 - OpenTelemetry, 브라우저 자동화, 대시보드의 기본 설치
 - Core 설치기가 대상 프로젝트의 Git 초기화, 커밋, 원격 저장소를 자동 생성
 

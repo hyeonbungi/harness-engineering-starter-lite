@@ -34,26 +34,26 @@
 | SRC-CH-001 | `CHAPTER 01. 강력한 모델도 실행 신뢰성을 보장하지 않는다.md` | merged | 모델 자신감 대신 실패를 구조적으로 진단하고 실행 증거로 판단 | HC-005, HC-007 | 다섯 실패 레이어를 별도 문서로 복제하지 않고 감사·게이트·실패 진단에 통합합니다. |
 | SRC-CH-002 | `CHAPTER 02. 하네스란 실제로 무엇인가.md` | core-direct | 지시·도구·환경·상태·피드백을 함께 검사하고 명령은 안전한 인자로 실행 | HC-002, HC-005, standard:security | 명령 설정과 실행기 계약의 직접 근거입니다. 별도 보안 정책은 `standard:security`로 승격합니다. |
 | SRC-CH-003 | `CHAPTER 03. 저장소를 단일 진실 원천으로 만들어라.md` | core-direct | 저장소를 SoR로 삼고 새 세션이 다섯 콜드 스타트 질문에 답하게 함 | HC-001, HC-004, HC-006 | 라우터·현재 상태·아키텍처와 콜드 스타트 계약의 직접 근거입니다. |
-| SRC-CH-004 | `CHAPTER 04. 명령 파일을 여러 파일로 분산하라.md` | core-direct | 루트 지침을 짧은 라우터로 유지하고 세부 규칙을 가까운 문서로 점진 공개 | HC-001, HC-009, HC-012, HC-019, HC-020, HC-021 | AGENTS 라우터·얇은 Claude Skill 포인터·가까운 커뮤니케이션/감사 문서·구성 요소 원장의 직접 근거입니다. |
+| SRC-CH-004 | `CHAPTER 04. 명령 파일을 여러 파일로 분산하라.md` | core-direct | 루트 지침을 짧은 라우터로 유지하고 세부 규칙을 가까운 문서로 점진 공개 | HC-001, HC-009, HC-012, HC-019, HC-020, HC-021 | AGENTS 라우터·상시/온디맨드 컨텍스트 분리·얇은 Claude Skill 포인터·가까운 주제 문서의 직접 근거입니다. |
 | SRC-CH-005 | `CHAPTER 05. 세션을 넘어 컨텍스트를 살아있게 유지하라.md` | core-direct | 기계 상태와 bounded human snapshot으로 세션 재구축 비용을 낮춤 | HC-003, HC-004, HC-014, HC-015, HC-019, HC-020, standard:plans | 기능 원장·현재 상태·호출형 감사·커뮤니케이션 자기개선·버전 수명주기의 직접 근거입니다. 별도 계획 이력은 `standard:plans`로 보류합니다. |
-| SRC-CH-006 | `CHAPTER 06. 모든 에이전트 세션 전에 초기화하라.md` | core-direct | 멱등 초기화와 POSIX·PowerShell의 반복 가능한 프리플라이트 제공 | HC-002, HC-005, HC-010, HC-018 | 설정·검사기와 두 운영체제 진입 래퍼의 직접 근거입니다. |
-| SRC-CH-007 | `CHAPTER 07. 에이전트에게 명확한 작업 경계를 그어 주어야 합니다.md` | core-direct | 기본 WIP를 하나로 제한하고 완료 또는 명시적 차단 뒤 다음 작업 선택 | HC-003, HC-005, HC-019, HC-020 | 상태 전환, WIP=1 검사, 단일 자기개선 루프와 호출형 감사의 직접 근거입니다. |
-| SRC-CH-008 | `CHAPTER 08. 기능 목록으로 에이전트의 행동을 제약하십시오.md` | core-direct | 기능 목록을 범위·상태·검증·증거의 실행 가능한 계약으로 사용 | HC-003, HC-005, HC-020 | 기능 스키마·영수증 상태 전환과 감사의 상태 점검 근거입니다. `passing` 비가역성은 채택하지 않습니다. |
-| SRC-CH-009 | `CHAPTER 09. 에이전트가 너무 일찍 완료를 선언하지 못하도록 방지하기.md` | core-direct | 완료 판단을 위험 기반 외부 게이트와 영수증으로 분리 | HC-005, HC-007, HC-020, advanced:independent-evaluator | 단계 게이트와 호출형 증거 감사를 Core에 반영하고, 별도 평가자 역할은 고위험일 때만 승격합니다. |
+| SRC-CH-006 | `CHAPTER 06. 모든 에이전트 세션 전에 초기화하라.md` | core-direct | 멱등 초기화와 POSIX·PowerShell의 반복 가능한 프리플라이트 제공 | HC-002, HC-005, HC-010, HC-018 | 같은 audit의 bounded summary·재귀 방지와 두 운영체제 init/Quick 진입점의 직접 근거입니다. |
+| SRC-CH-007 | `CHAPTER 07. 에이전트에게 명확한 작업 경계를 그어 주어야 합니다.md` | core-direct | 기본 WIP를 하나로 제한하고 완료 또는 명시적 차단 뒤 다음 작업 선택 | HC-003, HC-005, HC-019, HC-020, HC-022 | WIP=1, 상태 전환 검사, 단일 자기개선 루프, 호출형 감사와 병렬 worker 경계의 직접 근거입니다. |
+| SRC-CH-008 | `CHAPTER 08. 기능 목록으로 에이전트의 행동을 제약하십시오.md` | core-direct | 기능 목록을 범위·상태·검증·증거의 실행 가능한 계약으로 사용 | HC-003, HC-005, HC-020, HC-022 | 기능 원장·영수증 상태 전환, 감사와 lead 단일 상태 writer의 근거입니다. `passing` 비가역성은 채택하지 않습니다. |
+| SRC-CH-009 | `CHAPTER 09. 에이전트가 너무 일찍 완료를 선언하지 못하도록 방지하기.md` | core-direct | 완료 판단을 위험 기반 외부 게이트와 영수증으로 분리 | HC-005, HC-007, HC-020, HC-022, advanced:independent-evaluator | 단계 게이트, lead 재검증과 고위험 read-only reviewer를 Core에 반영합니다. |
 | SRC-CH-010 | `CHAPTER 10. 엔드투엔드 테스트(end-to-end testing)만이 진정한 검증이다.md` | core-direct | 경계 변경에는 E2E를 요구하고 위험이 낮은 변경은 가장 강한 적정 증거를 선택 | HC-005, HC-006, HC-007, HC-020, standard:e2e | V0~V4·황금 여정과 감사의 실제 증거 경계 근거입니다. 고정 계층 아키텍처는 강제하지 않습니다. |
-| SRC-CH-011 | `CHAPTER 11. 에이전트의 런타임을 관측 가능하게 만들어라.md` | merged | 실행 결과와 프로세스 판단을 구조화하고 필요할 때 관측성을 점진 승격 | HC-005, HC-007, HC-020, advanced:observability | Core에는 명령·영수증·감사 실패 신호를 통합하고 메트릭·트레이스는 분산 흐름에서만 승격합니다. |
-| SRC-CH-012 | `CHAPTER 12. 모든 세션은 클린 상태(clean state)로 끝나야 한다.md` | core-direct | 검증·상태·임시 산출물·재시작성·다음 행동의 클린 종료 검사 | HC-004, HC-005, HC-014, HC-019, HC-020, advanced:quality-ablation | 클린 상태·읽기 전용 감사·자기개선 종료·안전한 롤백은 Core에서 검사하고 품질 추세·절제 실험은 보류합니다. |
+| SRC-CH-011 | `CHAPTER 11. 에이전트의 런타임을 관측 가능하게 만들어라.md` | merged | 실행 결과와 프로세스 판단을 구조화하고 필요할 때 관측성을 점진 승격 | HC-005, HC-007, HC-020, advanced:observability | Core에는 command/timeout/output/process-group·영수증/Git 비용 신호를 통합하고 메트릭·트레이스는 조건부로 보류합니다. |
+| SRC-CH-012 | `CHAPTER 12. 모든 세션은 클린 상태(clean state)로 끝나야 한다.md` | core-direct | 검증·상태·임시 산출물·재시작성·다음 행동의 클린 종료 검사 | HC-004, HC-005, HC-014, HC-019, HC-020, advanced:quality-ablation | streaming 클린 상태·읽기 실패 차단·자기개선 종료·안전한 롤백은 Core에서 검사하고 품질 추세는 보류합니다. |
 | SRC-RES-001 | `리소스/index.md` | core-direct | 최소 팩으로 시작하고 관찰된 필요에 따라 고급 팩으로 승격 | HC-008 | Core 채택 절차와 프로필 경계의 직접 근거입니다. |
-| SRC-TPL-001 | `리소스/templates/AGENTS.md` | core-direct | 시작·작업·완료·종료를 라우팅하는 공통 에이전트 계약 | HC-001, HC-019, HC-020 | AGENTS·커뮤니케이션과 Codex/공용 호출형 감사 Skill 정본의 직접 템플릿 근거입니다. |
+| SRC-TPL-001 | `리소스/templates/AGENTS.md` | core-direct | 시작·작업·완료·종료를 라우팅하는 공통 에이전트 계약 | HC-001, HC-019, HC-020, HC-022 | AGENTS·커뮤니케이션·병렬 작업 라우팅과 Codex/공용 호출형 감사 Skill 정본의 직접 템플릿 근거입니다. |
 | SRC-TPL-002 | `리소스/templates/CLAUDE.md` | core-direct | Claude 진입점을 제공하되 공통 규칙은 중복하지 않음 | HC-009, HC-021 | CLAUDE와 Claude Skill 진입점은 공통 정본을 가리키고 규칙을 복제하지 않습니다. |
 | SRC-TPL-003 | `리소스/templates/claude-progress.md` | core-direct | 현재 진행·증거·다음 행동을 bounded snapshot에 남김 | HC-004 | 별도 진행 파일을 추가하지 않고 STATE에 통합해 상태 중복을 막습니다. |
 | SRC-TPL-004 | `리소스/templates/clean-state-checklist.md` | core-direct | 종료 전에 검증·재시작성·미검증 작업·임시 파일을 점검 | HC-004, HC-005 | 클린 상태 감사와 STATE 일관성 검사의 직접 근거입니다. |
 | SRC-TPL-005 | `리소스/templates/evaluator-rubric.md` | deferred | 정확성·범위·신뢰성·인계를 독립적으로 평가 | advanced:independent-evaluator | Lite는 고정 게이트만 설치하고 주관적·고위험 평가가 필요할 때 루브릭을 추가합니다. |
-| SRC-TPL-006 | `리소스/templates/feature_list.json` | core-direct | WIP·상태·검증·증거를 기계 판독 가능한 원장으로 관리 | HC-003, HC-005 | 설치된 기능 목록과 상태 검사기의 직접 근거입니다. |
+| SRC-TPL-006 | `리소스/templates/feature_list.json` | core-direct | WIP·상태·검증·증거를 기계 판독 가능한 원장으로 관리 | HC-003, HC-005, HC-022 | 설치된 기능 목록, 상태 검사기와 병렬 worker를 하나의 active 기능에 묶는 계약의 직접 근거입니다. |
 | SRC-TPL-007 | `리소스/templates/index.md` | merged | 템플릿별 적용법·보정·품질 추적을 채택 절차로 라우팅 | HC-003, HC-008, advanced:quality-ablation | 사용법은 ADOPTION과 기능 계약에 합치고 장기 품질 추세는 조건부로 보류합니다. |
-| SRC-TPL-008 | `리소스/templates/init.sh` | core-direct | 설치·기준 검증·시작을 POSIX·PowerShell의 반복 가능한 진입점으로 제공 | HC-002, HC-010, HC-018 | 설치된 두 init 래퍼와 설정 명령의 직접 근거입니다. |
+| SRC-TPL-008 | `리소스/templates/init.sh` | core-direct | 설치·기준 검증·시작을 POSIX·PowerShell의 반복 가능한 진입점으로 제공 | HC-002, HC-010, HC-018 | 설치 Core init과 스타터 원본 Quick/full 진입점을 분리하는 직접 근거입니다. |
 | SRC-TPL-009 | `리소스/templates/quality-document.md` | deferred | 도메인·계층 품질 스냅샷과 추세를 주기적으로 검토 | advanced:quality-ablation | 작은 저장소에 상시 유지 비용을 부과하지 않고 품질 드리프트가 관찰될 때 추가합니다. |
-| SRC-TPL-010 | `리소스/templates/session-handoff.md` | core-direct | 검증·변경·미검증·다음 행동을 다음 세션에 인계 | HC-004 | 별도 핸드오프 파일 대신 현재 STATE에 통합해 하나의 인간용 상태면을 유지합니다. |
+| SRC-TPL-010 | `리소스/templates/session-handoff.md` | core-direct | 검증·변경·미검증·다음 행동을 다음 세션에 인계 | HC-004, HC-022 | 세션 상태는 STATE에 통합하고 병렬 worker 결과는 필수 필드가 있는 일회성 인계로 제한합니다. |
 | SRC-REF-001 | `리소스/reference/coding-agent-startup-flow.md` | core-direct | 고정 시작 순서와 종료 미러를 운영체제별 표준 진입 경로로 유지 | HC-001, HC-005, HC-010, HC-018 | 라우터·감사와 POSIX·PowerShell init 흐름의 직접 근거입니다. |
 | SRC-REF-002 | `리소스/reference/glossary.md` | reference-only | 하네스 용어·토큰·경로 표기를 해석하는 기준 제공 | HC-011, HC-013 | 용어집을 Core에 복제하지 않고 Source 맵에서 원본 역할과 경로를 독립적으로 발견하게 합니다. |
 | SRC-REF-003 | `리소스/reference/index.md` | reference-only | 참고 문서의 읽기 순서와 선택 경로 제공 | HC-008, HC-011 | 원본 참고 트리의 탐색 라우터이므로 동작으로 과장하지 않고 채택·출처 문서에서 역할을 보존합니다. |
@@ -91,9 +91,9 @@
 | SRC-PRJ-001 | `프로젝트/index.md` | reference-only | 여섯 점진 실습의 비교 순서와 학습 목표 제공 | fixture:progressive-curriculum | 실습 지도는 제품 동작이 아니므로 보존하되 Core 계약으로 주장하지 않습니다. |
 | SRC-PRJ-002 | `프로젝트/project-01-baseline-vs-minimal-harness/index.md` | reference-only | 프롬프트 단독과 최소 하네스의 차이를 통제된 비교로 확인 | fixture:minimal-adoption, HC-008 | 채택 Fixture 설계의 참고 근거이며 실습 결과 수치를 템플릿 보장으로 사용하지 않습니다. |
 | SRC-PRJ-003 | `프로젝트/project-02-agent-readable-workspace/index.md` | reference-only | 저장소 가독성과 핸드오프가 콜드 스타트에 미치는 영향을 비교 | fixture:cold-start, HC-004, HC-006 | 콜드 스타트 Fixture의 참고 근거이며 교육용 골격은 복제하지 않습니다. |
-| SRC-PRJ-004 | `프로젝트/project-03-multi-session-continuity/index.md` | reference-only | 진행·핸드오프·멀티세션 연속성을 비교 | fixture:multi-session, HC-003, HC-004 | 상태·인계 설계의 참고 근거이며 별도 진행 파일은 중복 방지를 위해 설치하지 않습니다. |
+| SRC-PRJ-004 | `프로젝트/project-03-multi-session-continuity/index.md` | reference-only | 진행·핸드오프·멀티세션 연속성을 비교 | fixture:multi-session, HC-003, HC-004, HC-022 | 상태·구조화된 worker 인계 설계의 참고 근거이며 별도 진행 파일은 중복 방지를 위해 설치하지 않습니다. |
 | SRC-PRJ-005 | `프로젝트/project-04-incremental-indexing/index.md` | reference-only | 런타임 피드백과 범위 제어를 점진적으로 비교 | fixture:incremental-feedback, HC-003, HC-005 | 기능 범위·피드백 Fixture의 참고 근거이며 실습 환경은 Core 의존성이 아닙니다. |
-| SRC-PRJ-006 | `프로젝트/project-05-grounded-qa-verification/index.md` | reference-only | 생성자와 평가자 분리가 검증 편향에 미치는 영향을 비교 | fixture:independent-evaluation, advanced:independent-evaluator | 독립 평가자 승격 판단의 실험 근거이며 모든 작업에 다중 역할을 강제하지 않습니다. |
+| SRC-PRJ-006 | `프로젝트/project-05-grounded-qa-verification/index.md` | reference-only | 생성자와 평가자 분리가 검증 편향에 미치는 영향을 비교 | fixture:independent-evaluation, HC-022, advanced:independent-evaluator | cross_component와 high_risk의 read-only reviewer 근거이며 모든 작업에 다중 역할을 강제하지 않습니다. |
 | SRC-PRJ-007 | `프로젝트/project-06-runtime-observability-and-debugging/index.md` | reference-only | 전체 하네스·런타임 관측·클린 종료·절제를 종합 비교 | fixture:observability-capstone, advanced:observability, advanced:quality-ablation | 고급 프로필의 효용을 측정할 캡스톤 참고 자료이며 Core 기본 의존성으로 복제하지 않습니다. |
 
 ## 완전성 계약

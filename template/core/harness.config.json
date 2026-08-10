@@ -29,7 +29,10 @@
   },
   "runner": {
     "default_timeout_seconds": 300,
-    "max_output_bytes": 65536
+    "max_output_bytes": 65536,
+    "max_gate_commands_per_run": 32,
+    "max_gate_timeout_seconds_per_run": 900,
+    "max_combined_output_bytes": 32768
   },
   "gates": {
     "V0": {
@@ -49,6 +52,7 @@
           ],
           "cwd": ".",
           "timeout_seconds": 60,
+          "execution_scope": "feature",
           "why": "The standard startup path must succeed before the harness is complete.",
           "fix": "Run the platform adapter (./init.sh or .\\init.ps1), repair the reported configuration or file issue, and retry."
         },
@@ -62,6 +66,7 @@
           ],
           "cwd": ".",
           "timeout_seconds": 60,
+          "execution_scope": "feature",
           "why": "Initialization must be safe to repeat without hidden one-time state.",
           "fix": "Make setup and startup checks idempotent, then run the platform adapter twice."
         },
@@ -76,6 +81,7 @@
           ],
           "cwd": ".",
           "timeout_seconds": 30,
+          "execution_scope": "feature",
           "why": "A fresh session must recover the five required answers from repository files.",
           "fix": "Complete project metadata, architecture, commands, validation, and current state."
         }
@@ -156,6 +162,12 @@
       "*.tmp",
       "*.bak",
       "debug.log"
+    ],
+    "excluded_dirs": [
+      ".git",
+      ".harness/backups",
+      "node_modules",
+      ".venv"
     ]
   }
 }

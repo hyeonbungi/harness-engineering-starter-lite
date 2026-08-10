@@ -66,12 +66,16 @@ guarantee.
 4. Give every gate command a stable, unique `id`; never use the reserved
    `harness-audit` ID.
 5. Set a project-relative `cwd`, a positive `timeout_seconds`, and, when the
-   default is unsuitable, `max_output_bytes`.
+   default is unsuitable, `max_output_bytes`. Keep finite runner budgets for
+   external command count, aggregate timeout, and combined retained output.
 6. Enable only risk profiles whose contiguous V0..Vn levels are configured.
 7. Describe actual boundaries in `docs/ARCHITECTURE.md` and current facts in
    `docs/STATE.md`.
 8. Do not add `harness.config.json` to feature `tracked_files`; schema-v4
    receipts bind its relevant execution contract separately.
+9. List only project-owned dependency or cache trees in
+   `clean_state.excluded_dirs`; never exclude product source or generated output
+   whose cleanliness is part of completion.
 
 Commands inherit the caller's environment. Do not store tokens, passwords, or
 private values in configuration or command arguments. The runner bounds retained
@@ -114,13 +118,20 @@ be tracked.
 Keep the `harness:state` marker block in `docs/STATE.md` intact. State commands
 update only that bounded block from `feature_list.json`.
 
+Gate commands default to `execution_scope: profile`, meaning every selected
+risk profile runs them. Mark a focused command `execution_scope: feature` only
+when it should run during completion for a feature that binds its exact ID.
+Explicit `verify --risk` runs profile-scope commands only; it never executes an
+unbound feature command. Both verify and startup reject a selected level above
+V0 when that level has no real profile-scope command. Startup also rejects direct
+or indirect same-repository init re-entry.
+
 ## 3. Validate
 
 ```bash
 ./init.sh --setup
 ./init.sh
 ./init.sh
-python3 scripts/harness.py cold-start --json
 ```
 
 Native Windows PowerShell uses:
@@ -129,16 +140,21 @@ Native Windows PowerShell uses:
 .\init.ps1 -Setup
 .\init.ps1
 .\init.ps1
-py -3 scripts/harness.py cold-start --json
 ```
 
-The standard path must be safe to repeat. BOOT-001 already binds the Core audit,
-two initialization runs, and the five cold-start answers to executable V0/V1
-commands.
+The standard path must be safe to repeat. Each init emits the five bounded
+`cold-start-summary` answers from the same successful audit. BOOT-001 binds the
+Core audit, two initialization runs, and the explicit machine-readable
+`cold-start --json` self-check to executable V0/V1 commands.
+
+`init --setup` is the deliberate exception to single-audit reuse. Because the
+declared setup command may mutate the project, Core audits again after setup and
+uses that post-mutation result as V0 evidence.
 
 The repeated sequence above is adoption evidence, not the cost of every work step.
 For an ordinary session, read `AGENTS.md` and the current `docs/STATE.md`, run the
-platform init once, and use `cold-start --json` to select one current feature.
+platform init once, and use its `cold-start-summary` to select one current feature.
+Run the separate JSON command only when another machine-readable read is required.
 Do not load the whole feature list, Source map, receipt directory, architecture,
 or validation history unless the selected work needs it. Use focused checks while
 editing and the required risk profile once at completion.
@@ -169,9 +185,12 @@ python3 scripts/harness.py complete BOOT-001 --risk local_code
 On Windows, replace `python3` with the same approved Python 3.10+ command chosen
 for adoption, such as `py -3`.
 
-`complete` is the only supported path to `passing`. It executes every level
-required by the selected risk profile, proves that all feature bindings ran,
-checks clean state, and writes a schema-v4 receipt under `.harness/evidence/`.
+`complete` is the only supported path to `passing`. It executes profile-wide
+commands plus feature-scoped commands bound by the current feature for every
+required level, proves that all bindings ran, checks clean state, and writes a
+schema-v4 receipt under `.harness/evidence/`. Selection fails before spawning a
+gate when external command count or aggregate declared timeout exceeds the
+runner budget.
 
 When a resident agent confirms a recurring or reproducible defect in agent
 behavior, the harness, or the work loop, the installed contract grants standing
@@ -187,15 +206,18 @@ Strict audit compares the latest receipt with the current:
 
 - receipt file digest and complete schema-v4 execution structure;
 - full `harness.config.json` provenance digest recorded at completion;
-- freshness digest of the executed V0..Vn gates, selected and startup risk
-  profiles, runner, project, paths, setup/start commands, startup profile, and
-  clean-state rules;
+- freshness digest of the profile-wide and current-feature V0..Vn gates actually
+  executed, selected and startup risk
+  profiles, effective runner defaults, execution-contract version, project,
+  paths, setup/start commands, startup profile, and clean-state rules;
 - feature risk, verification, and tracked-path definition digest;
 - digest of every exact tracked file;
 - Git revision, when both receipt and current project are versioned;
 - OS/platform and Python implementation/major.minor runtime identity.
 
-When Git is unavailable, exact tracked-file digests remain authoritative. A
+When both completion and current audit are unversioned, exact tracked-file
+digests remain authoritative. Moving between unversioned and versioned state
+makes the revision evidence stale. A
 stale receipt blocks strict audit. Use `state reopen` with a reason and complete
 again; recovery validates old receipt structure without pretending it is fresh.
 Unselected gates and unrelated risk profiles may change without invalidating a

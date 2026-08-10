@@ -6,14 +6,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ntpath
 import os
 import re
+import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path, PurePath
 
 
 ROOT = Path(__file__).resolve().parent.parent
+MAX_EXPANDED_SOURCES_PER_REFERENCE = 65
+MAX_SOURCE_REFERENCE_DIGITS = 6
+MAX_LIVE_SOURCE_ENTRIES = 1024
+MAX_CORE_DISTRIBUTION_ENTRIES = 256
+EXPECTED_CORE_MANAGED_FILES = 22
+MAX_SELF_AUDIT_OUTPUT_BYTES = 64 * 1024
+SELF_AUDIT_TIMEOUT_SECONDS = 15
 REQUIRED_FILES = (
     "template/core/.agents/skills/audit-harness-health/SKILL.md",
     "template/core/.claude/skills/audit-harness-health/SKILL.md",
@@ -24,6 +34,7 @@ REQUIRED_FILES = (
     "README.md",
     "VERSION",
     "feature_list.json",
+    "init.sh",
     "init.ps1",
     "docs/STATE.md",
     "docs/source-inventory.md",
@@ -42,6 +53,7 @@ REQUIRED_FILES = (
     "template/core/init.ps1",
     "template/core/scripts/harness.py",
     "template/core/docs/STATE.md",
+    "template/core/docs/AGENT_COORDINATION.md",
     "template/core/docs/ARCHITECTURE.md",
     "template/core/docs/COMMUNICATION.md",
     "template/core/docs/VALIDATION.md",
@@ -56,6 +68,181 @@ REQUIRED_FILES = (
 
 def fail(message: str) -> None:
     raise SystemExit(f"ERROR: {message}")
+
+
+def bounded_relative_files(
+    root: Path,
+    *,
+    max_files: int,
+    max_entries: int,
+    label: str,
+) -> dict[str, Path]:
+    files: dict[str, Path] = {}
+    stack = [root]
+    entry_count = 0
+    while stack:
+        directory = stack.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    entry_count += 1
+                    if entry_count > max_entries:
+                        fail(
+                            f"WHAT: {label} exceeds the {max_entries}-entry scan budget.\n"
+                            "WHY: Quick startup must not recursively materialize an "
+                            "unbounded tree.\nFIX: restore the expected bounded corpus and "
+                            "remove unintended generated subtrees."
+                        )
+                    if entry.is_symlink():
+                        fail(f"{label} contains unsupported link entry: {entry.path}")
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                            continue
+                        if not entry.is_file(follow_symlinks=False):
+                            fail(f"{label} contains a non-regular entry: {entry.path}")
+                    except OSError as exc:
+                        fail(f"cannot inspect {label} entry {entry.path}: {exc}")
+                    relative = Path(entry.path).relative_to(root).as_posix()
+                    files[relative] = Path(entry.path)
+                    if len(files) > max_files:
+                        fail(
+                            f"WHAT: {label} contains more than {max_files} files.\n"
+                            "WHY: Quick startup file discovery must stop at the declared "
+                            "contract.\nFIX: remove unexpected files or update the reviewed "
+                            "ledger and its finite budget together."
+                        )
+        except SystemExit:
+            raise
+        except OSError as exc:
+            fail(f"cannot scan {label} directory {directory}: {exc}")
+    return files
+
+
+def bounded_sha256(path: Path, expected_size: int, label: str) -> str:
+    try:
+        actual_size = path.stat().st_size
+    except OSError as exc:
+        fail(f"cannot inspect {label}: {exc}")
+    if actual_size != expected_size:
+        fail(
+            f"{label} size changed: expected {expected_size}, observed {actual_size}"
+        )
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with path.open("rb") as handle:
+            while total <= expected_size:
+                chunk = handle.read(min(1024 * 1024, expected_size + 1 - total))
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > expected_size:
+                    fail(f"{label} grew while it was being hashed")
+                digest.update(chunk)
+    except OSError as exc:
+        fail(f"cannot read {label}: {exc}")
+    if total != expected_size:
+        fail(f"{label} changed size while it was being hashed")
+    return digest.hexdigest()
+
+
+def run_bounded_subprocess(
+    argv: list[str],
+    *,
+    cwd: Path,
+    timeout_seconds: float,
+    max_output_bytes: int = MAX_SELF_AUDIT_OUTPUT_BYTES,
+) -> tuple[int, str, bool, bool]:
+    creation: dict[str, object]
+    if os.name == "posix":
+        creation = {"start_new_session": True}
+    elif os.name == "nt":
+        creation = {
+            "creationflags": getattr(
+                subprocess,
+                "CREATE_NEW_PROCESS_GROUP",
+                0x00000200,
+            )
+        }
+    else:
+        creation = {}
+    process = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        **creation,
+    )
+    assert process.stdout is not None
+    tail = bytearray()
+    truncated = False
+
+    def drain() -> None:
+        nonlocal truncated
+        try:
+            for chunk in iter(lambda: process.stdout.read(65536), b""):
+                tail.extend(chunk)
+                overflow = len(tail) - max_output_bytes
+                if overflow > 0:
+                    del tail[:overflow]
+                    truncated = True
+        finally:
+            process.stdout.close()
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
+
+    def terminate_group(parent_running: bool) -> None:
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            return
+        if os.name == "nt":
+            try:
+                os.kill(process.pid, getattr(signal, "CTRL_BREAK_EVENT", 1))
+            except OSError:
+                pass
+            if parent_running:
+                system_root = os.environ.get("SystemRoot") or r"C:\Windows"
+                taskkill = ntpath.join(system_root, "System32", "taskkill.exe")
+                try:
+                    subprocess.run(
+                        [taskkill, "/PID", str(process.pid), "/T", "/F"],
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=5,
+                        check=False,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            return
+        if parent_running:
+            try:
+                process.kill()
+            except OSError:
+                pass
+
+    timed_out = False
+    try:
+        return_code = process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        terminate_group(parent_running=True)
+        if process.poll() is None:
+            process.kill()
+        return_code = process.wait(timeout=2)
+    else:
+        terminate_group(parent_running=False)
+    reader.join(timeout=2)
+    if reader.is_alive():
+        timed_out = True
+    text = tail.decode("utf-8", errors="replace")
+    return return_code, text, truncated, timed_out
 
 
 def portable_relative_path(path: PurePath, root: PurePath) -> str:
@@ -88,15 +275,87 @@ def validate_claude_entrypoint(path: Path) -> None:
         )
 
 
+def validate_agent_coordination_router() -> None:
+    path = ROOT / "AGENTS.md"
+    text = path.read_text(encoding="utf-8")
+    required = (
+        "<!-- harness:agent-coordination:v1 -->",
+        "복수 에이전트 또는 병렬 작업을 명시적으로 요청한 경우에만",
+        "template/core/docs/AGENT_COORDINATION.md",
+        "일반 작업에서 에이전트를 자동으로 생성하지 않습니다",
+    )
+    missing = [value for value in required if value not in text]
+    if missing:
+        fail(
+            "WHAT: root agent coordination router drifted; "
+            f"missing {missing}.\n"
+            "WHY: contributors could start parallel workers without loading the "
+            "Core isolation and lead-integration contract.\n"
+            "FIX: restore the v1 marker and explicit-request route to "
+            "template/core/docs/AGENT_COORDINATION.md."
+        )
+
+
+def validate_root_quick_adapter() -> None:
+    contracts = {
+        "AGENTS.md": (
+            "./init.sh --quick",
+            ".\\init.ps1 -Quick",
+            "인자 없는 전체 init",
+        ),
+        "init.sh": (
+            "--quick",
+            "PYTHONDONTWRITEBYTECODE=1",
+            "python3 scripts/validate_harness.py",
+            "python3 -B -m unittest discover -s tests -v",
+            '[[ "$QUICK" == false ]]',
+        ),
+        "init.ps1": (
+            "[switch]$Quick",
+            "PYTHONDONTWRITEBYTECODE",
+            "scripts\\validate_harness.py",
+            '"unittest"',
+            "-not $Quick.IsPresent",
+        ),
+    }
+    for relative, required in contracts.items():
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        missing = [value for value in required if value not in text]
+        if missing:
+            fail(
+                f"WHAT: root Quick/full startup contract drifted in {relative}; "
+                f"missing {missing}.\nWHY: normal contributor sessions could run the "
+                "full distribution suite every time or completion could silently skip "
+                "it.\nFIX: restore explicit Quick validation-only startup and keep the "
+                "no-argument full Fixture path."
+            )
+
+
 def expand_source_reference(reference: str, known: set[str]) -> list[str]:
     match = re.fullmatch(r"(SRC-[A-Z]+-)(\d+)(?:\.\.(\d+))?", reference)
     if not match:
         fail(f"invalid source reference syntax: {reference!r}")
     prefix, start_text, end_text = match.groups()
+    if len(start_text) > MAX_SOURCE_REFERENCE_DIGITS or (
+        end_text is not None and len(end_text) > MAX_SOURCE_REFERENCE_DIGITS
+    ):
+        fail(
+            "WHAT: source reference numeric width exceeds the finite parser budget: "
+            f"{reference!r}.\nWHY: converting an unbounded integer can consume excessive "
+            "CPU before range validation.\nFIX: use existing bounded Source IDs."
+        )
     start = int(start_text)
     end = int(end_text) if end_text is not None else start
     if end < start:
         fail(f"reversed source range: {reference}")
+    expanded_count = end - start + 1
+    if expanded_count > MAX_EXPANDED_SOURCES_PER_REFERENCE:
+        fail(
+            f"WHAT: source reference {reference!r} expands to {expanded_count} IDs; "
+            f"the limit is {MAX_EXPANDED_SOURCES_PER_REFERENCE}.\nWHY: range expansion "
+            "must be bounded before allocating a list.\nFIX: split the reference into "
+            "small ranges that name existing Sources."
+        )
     width = len(start_text)
     expanded = [f"{prefix}{value:0{width}d}" for value in range(start, end + 1)]
     missing = [source_id for source_id in expanded if source_id not in known]
@@ -220,23 +479,26 @@ def validate_source_traceability() -> tuple[set[str], bool]:
             )
         if source_root.is_dir():
             source_live = True
-            actual = {
-                path.relative_to(source_root).as_posix(): path
-                for path in source_root.rglob("*")
-                if path.is_file()
-            }
             expected_paths = {
                 item["path"]: (item["size"], item["sha256"])
                 for item in inventory.values()
             }
+            actual = bounded_relative_files(
+                source_root,
+                max_files=len(expected_paths),
+                max_entries=MAX_LIVE_SOURCE_ENTRIES,
+                label="live source corpus",
+            )
             if set(actual) != set(expected_paths):
                 fail("the live source corpus paths no longer match the 65-row inventory.")
             for relative, path in actual.items():
                 expected_size, expected_digest = expected_paths[relative]
-                digest = hashlib.sha256(path.read_bytes()).hexdigest()
-                if path.stat().st_size != expected_size or not digest.startswith(
-                    expected_digest
-                ):
+                digest = bounded_sha256(
+                    path,
+                    int(expected_size),
+                    f"live source corpus file {relative}",
+                )
+                if not digest.startswith(str(expected_digest)):
                     fail(f"live source corpus metadata changed: {relative}")
     return set(inventory), source_live
 
@@ -338,7 +600,13 @@ def validate_core_profile(source_ids: set[str]) -> None:
     component_ids: set[str] = set()
     directly_cited_source_ids: set[str] = set()
     tracked_paths: set[str] = set()
-    for component in components.get("components", []):
+    component_records = components.get("components", [])
+    if not isinstance(component_records, list) or len(component_records) != EXPECTED_CORE_MANAGED_FILES:
+        fail(
+            "Core component ledger must contain exactly "
+            f"{EXPECTED_CORE_MANAGED_FILES} managed files."
+        )
+    for component in component_records:
         component_id = component.get("id")
         if not isinstance(component_id, str) or component_id in component_ids:
             fail(f"invalid or duplicate Core component id: {component_id!r}")
@@ -375,11 +643,14 @@ def validate_core_profile(source_ids: set[str]) -> None:
             f"provenance: {uncited_core_direct}"
         )
 
-    distributable_paths = {
-        portable_relative_path(path, core)
-        for path in core.rglob("*")
-        if path.is_file()
-    }
+    distributable_paths = set(
+        bounded_relative_files(
+            core,
+            max_files=EXPECTED_CORE_MANAGED_FILES,
+            max_entries=MAX_CORE_DISTRIBUTION_ENTRIES,
+            label="Core distribution",
+        )
+    )
     if tracked_paths != distributable_paths:
         missing = sorted(distributable_paths - tracked_paths)
         stale = sorted(tracked_paths - distributable_paths)
@@ -392,22 +663,31 @@ def validate_core_profile(source_ids: set[str]) -> None:
             if reference.startswith("HC-") and reference not in component_ids:
                 fail(f"{source_id} references unknown Core component {reference}.")
 
-    result = subprocess.run(
+    return_code, output, truncated, timed_out = run_bounded_subprocess(
         [sys.executable, "scripts/harness.py", "audit", "--template"],
         cwd=core,
-        text=True,
-        capture_output=True,
-        check=False,
+        timeout_seconds=SELF_AUDIT_TIMEOUT_SECONDS,
     )
-    if result.returncode != 0:
+    if timed_out:
+        fail(
+            "WHAT: Core distribution self-audit exceeded "
+            f"{SELF_AUDIT_TIMEOUT_SECONDS} seconds.\nWHY: Quick startup needs a finite "
+            "watchdog even when the validator under test regresses.\nFIX: repair the "
+            "template audit loop or blocking filesystem/Git query."
+        )
+    if return_code != 0:
+        suffix = "\n[bounded tail; earlier output omitted]" if truncated else ""
         fail(
             "Core distribution self-audit failed:\n"
-            + (result.stdout + result.stderr).strip()
+            + output.strip()
+            + suffix
         )
 
 
 def main() -> None:
     validate_required_files()
+    validate_agent_coordination_router()
+    validate_root_quick_adapter()
     validate_claude_entrypoint(ROOT / "CLAUDE.md")
     validate_claude_entrypoint(ROOT / "template/core/CLAUDE.md")
     source_ids, source_live = validate_source_traceability()

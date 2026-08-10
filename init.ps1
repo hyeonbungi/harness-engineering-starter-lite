@@ -1,7 +1,9 @@
 #requires -Version 5.1
 
 [CmdletBinding()]
-param()
+param(
+    [switch]$Quick
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -87,6 +89,11 @@ $previousAutomaticInstall = [Environment]::GetEnvironmentVariable(
     $automaticInstallName,
     [EnvironmentVariableTarget]::Process
 )
+$bytecodeName = "PYTHONDONTWRITEBYTECODE"
+$previousBytecode = [Environment]::GetEnvironmentVariable(
+    $bytecodeName,
+    [EnvironmentVariableTarget]::Process
+)
 $nativePreferenceExists = Test-Path `
     -LiteralPath "Variable:\PSNativeCommandUseErrorActionPreference"
 $previousNativePreference = $null
@@ -99,6 +106,11 @@ $python = $null
 $locationPushed = $false
 $exitCode = 1
 try {
+    [Environment]::SetEnvironmentVariable(
+        $bytecodeName,
+        "1",
+        [EnvironmentVariableTarget]::Process
+    )
     [Environment]::SetEnvironmentVariable(
         $automaticInstallName,
         "false",
@@ -134,7 +146,7 @@ try {
         & $python.Executable @validateArguments
         $exitCode = $LASTEXITCODE
 
-        if ($exitCode -eq 0) {
+        if ($exitCode -eq 0 -and -not $Quick.IsPresent) {
             $testArguments = @()
             $testArguments += $python.Prefix
             $testArguments += "-B"
@@ -149,7 +161,12 @@ try {
         }
 
         if ($exitCode -eq 0) {
-            Write-Output "==> Baseline healthy"
+            if ($Quick.IsPresent) {
+                Write-Output "==> Quick baseline healthy (full Fixture suite deferred)"
+            }
+            else {
+                Write-Output "==> Baseline healthy"
+            }
         }
     }
 }
@@ -164,6 +181,11 @@ finally {
     [Environment]::SetEnvironmentVariable(
         $automaticInstallName,
         $previousAutomaticInstall,
+        [EnvironmentVariableTarget]::Process
+    )
+    [Environment]::SetEnvironmentVariable(
+        $bytecodeName,
+        $previousBytecode,
         [EnvironmentVariableTarget]::Process
     )
     if ($nativePreferenceExists) {
