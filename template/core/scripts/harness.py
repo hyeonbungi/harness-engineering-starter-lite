@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import ntpath
 import os
 import platform
@@ -41,6 +42,7 @@ REQUIRED_FILES = (
     "init.ps1",
     "scripts/harness.py",
     "docs/STATE.md",
+    "docs/AGENT_COORDINATION.md",
     "docs/ARCHITECTURE.md",
     "docs/COMMUNICATION.md",
     "docs/VALIDATION.md",
@@ -54,14 +56,58 @@ PLACEHOLDERS = ("REPLACE_ME", "YYYY-MM-DD")
 PYTHON_TOKEN = "{python}"
 STATE_BLOCK_START = "<!-- harness:state:start -->"
 STATE_BLOCK_END = "<!-- harness:state:end -->"
-STARTUP_CONTEXT_LIMITS = {
+ALWAYS_READ_CONTEXT_LIMITS = {
     "AGENTS.md": 8 * 1024,
     "CLAUDE.md": 4 * 1024,
-    "docs/COMMUNICATION.md": 16 * 1024,
     "docs/STATE.md": 16 * 1024,
+}
+MAX_ALWAYS_READ_CONTEXT_BYTES = 12 * 1024
+ON_DEMAND_CONTEXT_LIMITS = {
+    "docs/COMMUNICATION.md": 16 * 1024,
+    "docs/AGENT_COORDINATION.md": 12 * 1024,
+}
+CONTEXT_ROUTING_REQUIREMENTS = {
+    "AGENTS.md": (
+        "일반 시작에서는 미리 읽지 않고",
+        "현재 작업과 직접 관련된 경우에만",
+    ),
+    "docs/COMMUNICATION.md": (
+        "온디맨드 조건을 만족할 때만",
+        "상시 컨텍스트 합계",
+    ),
 }
 MAX_FEATURE_EVIDENCE_REFERENCES = 5
 MAX_FEATURE_HISTORY_EVENTS = 20
+MAX_FEATURES = 256
+MAX_TRACKED_FILES_PER_FEATURE = 128
+MAX_UNIQUE_TRACKED_BYTES = 256 * 1024 * 1024
+MAX_UNIQUE_RECEIPT_BYTES_PER_AUDIT = 64 * 1024 * 1024
+MAX_JSON_BYTES = 8 * 1024 * 1024
+MAX_GATE_COMMANDS_PER_LEVEL = 256
+MAX_ARGV_ITEMS = 64
+MAX_ARGV_BYTES = 32 * 1024
+MAX_VERIFICATION_REQUIREMENTS_PER_FEATURE = 64
+MAX_BINDINGS_PER_REQUIREMENT = 32
+MAX_SOURCES_PER_FEATURE = 64
+MAX_CLEAN_STATE_GLOBS = 64
+MAX_CLEAN_STATE_EXCLUDED_DIRS = 32
+MAX_CLEAN_STATE_SCAN_ENTRIES = 250000
+MAX_CLEAN_STATE_REPORTED_BYTES = 8 * 1024
+MAX_COLD_START_OUTPUT_BYTES = 16 * 1024
+MAX_EXPANDED_SOURCES_PER_REFERENCE = 65
+MAX_EXPANDED_SOURCES_PER_FEATURE = 128
+MAX_SOURCE_REFERENCE_DIGITS = 6
+DEFAULT_MAX_GATE_COMMANDS_PER_RUN = 32
+DEFAULT_MAX_GATE_TIMEOUT_SECONDS_PER_RUN = 1800
+DEFAULT_MAX_COMBINED_OUTPUT_BYTES = 128 * 1024
+MAX_GATE_COMMANDS_PER_RUN = 256
+MAX_GATE_TIMEOUT_SECONDS_PER_RUN = 86400
+MAX_COMBINED_OUTPUT_BYTES = 1024 * 1024
+GIT_QUERY_TIMEOUT_SECONDS = 5
+MAX_GIT_ANCESTRY_QUERIES_PER_AUDIT = MAX_FEATURES
+MAX_GIT_QUERY_SECONDS_PER_AUDIT = 10
+EXECUTION_CONTRACT_VERSION = 2
+INIT_REENTRANCY_ENV = "HARNESS_CORE_INIT_STACK"
 AUTONOMOUS_IMPROVEMENT_MARKER = "<!-- harness:auto-improvement:v1 -->"
 AUTONOMOUS_IMPROVEMENT_REQUIREMENTS = {
     "AGENTS.md": (
@@ -81,6 +127,66 @@ AUTONOMOUS_IMPROVEMENT_REQUIREMENTS = {
         "제품 기능·데이터",
         "BOOT-001",
         "최대 한 번",
+    ),
+}
+AGENT_COORDINATION_MARKER = "<!-- harness:agent-coordination:v1 -->"
+AGENT_COORDINATION_REQUIREMENTS = {
+    "AGENTS.md": (
+        "복수 에이전트 또는 병렬 작업을 명시적으로 요청한 경우에만",
+        "docs/AGENT_COORDINATION.md",
+        "일반 작업에서는 에이전트를 자동으로",
+        "가장 작은 worker 수",
+        "하위 에이전트를 생성하지",
+    ),
+    "docs/AGENT_COORDINATION.md": (
+        "공통의 깨끗한 Git 기준 revision",
+        "writer마다 별도 worktree",
+        "비 Git 프로젝트",
+        "소유 경로는 서로 겹치지",
+        "lead만 갱신",
+        "objective:",
+        "dependencies:",
+        "mode: read-only | writer",
+        "forbidden_paths:",
+        "validation_commands:",
+        "risk_profile:",
+        "deliverable:",
+        "stop_conditions:",
+        "task_id:",
+        "status: completed | blocked | failed",
+        "base_revision:",
+        "result_revision:",
+        "worktree_or_diff:",
+        "assigned_paths:",
+        "changed_paths:",
+        "summary:",
+        "validation:",
+        "command: 정확히 실행한 명령",
+        "exit_code: 0",
+        "result: 핵심 결과",
+        "not_run:",
+        "assumptions:",
+        "unknowns:",
+        "failures_or_conflicts:",
+        "remaining_risks:",
+        "integration_order:",
+        "worker의 `status`는 하위 작업 결과만",
+        "`passing`이나 기능의 최종",
+        "lead가 직접 다시 실행",
+        "cross_component",
+        "high_risk",
+        "read-only reviewer",
+        "max_parallel_workers: 2",
+        "max_worker_rounds: 2",
+        "max_review_cycles: 1",
+        "max_delegation_depth: 0",
+        "timeout_minutes:",
+        "token_budget:",
+        "context_mode: minimal",
+        "handoff_max_bytes: 8192",
+        "enforcement: host | advisory",
+        "예산 소진",
+        "호스트 실행 기록",
     ),
 }
 AUDIT_SKILL_NAME = "audit-harness-health"
@@ -134,18 +240,62 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def read_json(path: Path) -> dict[str, Any]:
+def validate_json_file_size(path: Path) -> int:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        size = path.stat().st_size
+    except OSError as exc:
+        raise HarnessFailure(f"cannot inspect {path.relative_to(ROOT)}: {exc}") from exc
+    if size > MAX_JSON_BYTES:
+        raise HarnessFailure(
+            f"{path.relative_to(ROOT)} is {size} bytes; the JSON audit limit is "
+            f"{MAX_JSON_BYTES} bytes. Split durable history or generated data from "
+            "the operational control plane."
+        )
+    return size
+
+
+def read_bounded_json_bytes(path: Path) -> bytes:
+    validate_json_file_size(path)
+    try:
+        with path.open("rb") as handle:
+            payload = handle.read(MAX_JSON_BYTES + 1)
     except OSError as exc:
         raise HarnessFailure(f"cannot read {path.relative_to(ROOT)}: {exc}") from exc
+    if len(payload) > MAX_JSON_BYTES:
+        raise HarnessFailure(
+            f"{path.relative_to(ROOT)} grew beyond the JSON audit limit of "
+            f"{MAX_JSON_BYTES} bytes while it was being read."
+        )
+    return payload
+
+
+def reject_nonfinite_json(value: str) -> None:
+    raise ValueError(f"non-finite JSON number {value!r} is not allowed")
+
+
+def parse_json_object(path: Path, payload: bytes) -> dict[str, Any]:
+    try:
+        value = json.loads(
+            payload.decode("utf-8"),
+            parse_constant=reject_nonfinite_json,
+        )
+    except UnicodeDecodeError as exc:
+        raise HarnessFailure(
+            f"{path.relative_to(ROOT)} is not valid UTF-8 JSON: {exc}"
+        ) from exc
     except json.JSONDecodeError as exc:
         raise HarnessFailure(
             f"{path.relative_to(ROOT)} is invalid JSON at line {exc.lineno}: {exc.msg}"
         ) from exc
+    except ValueError as exc:
+        raise HarnessFailure(f"{path.relative_to(ROOT)} is invalid JSON: {exc}") from exc
     if not isinstance(value, dict):
         raise HarnessFailure(f"{path.relative_to(ROOT)} must contain a JSON object.")
     return value
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    return parse_json_object(path, read_bounded_json_bytes(path))
 
 
 def validate_claude_entrypoint() -> None:
@@ -166,7 +316,20 @@ def validate_claude_entrypoint() -> None:
 
 
 def validate_startup_context() -> None:
-    for relative, maximum in STARTUP_CONTEXT_LIMITS.items():
+    overlap = set(ALWAYS_READ_CONTEXT_LIMITS) & set(ON_DEMAND_CONTEXT_LIMITS)
+    if overlap:
+        raise HarnessFailure(
+            "WHAT: context surfaces are both always-read and on-demand: "
+            + ", ".join(sorted(overlap))
+            + ".\nWHY: an ambiguous route makes normal-session context cost "
+            "unpredictable.\nFIX: keep each surface in exactly one context class."
+        )
+
+    sizes: dict[str, int] = {}
+    for relative, maximum in {
+        **ALWAYS_READ_CONTEXT_LIMITS,
+        **ON_DEMAND_CONTEXT_LIMITS,
+    }.items():
         path = ROOT / relative
         try:
             size = path.stat().st_size
@@ -174,11 +337,36 @@ def validate_startup_context() -> None:
             raise HarnessFailure(f"cannot inspect {relative}: {exc}") from exc
         if size > maximum:
             raise HarnessFailure(
-                f"{relative} is {size} bytes; the startup context limit is "
-                f"{maximum} bytes. This always-read surface has accumulated too "
-                "much context. Consolidate duplicate rules, replace historical "
-                "narrative with current facts, or move task-specific detail to an "
+                f"WHAT: {relative} is {size} bytes; its context limit is {maximum} "
+                "bytes.\nWHY: an oversized resident instruction surface can consume "
+                "unbounded startup or on-demand context.\nFIX: consolidate duplicate "
+                "rules, replace history with current facts, or move task detail to an "
                 "existing nearby document; do not raise the limit just to pass audit."
+            )
+        sizes[relative] = size
+
+    always_read_total = sum(sizes[path] for path in ALWAYS_READ_CONTEXT_LIMITS)
+    if always_read_total > MAX_ALWAYS_READ_CONTEXT_BYTES:
+        raise HarnessFailure(
+            f"WHAT: always-read context is {always_read_total} bytes; the combined "
+            f"limit is {MAX_ALWAYS_READ_CONTEXT_BYTES} bytes.\nWHY: individually small "
+            "files can still make every agent session expensive when loaded together.\n"
+            "FIX: deduplicate AGENTS, CLAUDE, and STATE or move conditional detail to "
+            "an on-demand document; do not increase the combined limit."
+        )
+
+    for relative, required_text in CONTEXT_ROUTING_REQUIREMENTS.items():
+        try:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HarnessFailure(f"cannot read {relative}: {exc}") from exc
+        missing = [value for value in required_text if value not in text]
+        if missing:
+            raise HarnessFailure(
+                f"WHAT: context routing drifted in {relative}; missing {missing}.\n"
+                "WHY: COMMUNICATION could be preloaded in normal sessions instead of "
+                "remaining an on-demand contract.\nFIX: restore the always-read versus "
+                "on-demand route and rerun audit."
             )
 
 
@@ -202,6 +390,30 @@ def validate_autonomous_improvement_contract() -> None:
                 "authority to repair structural agent, harness, or loop defects.\n"
                 "FIX: restore the v1 marker and required authority, opt-out, scope, "
                 "budget, and maintenance-routing language; then rerun audit."
+            )
+
+
+def validate_agent_coordination_contract() -> None:
+    for relative, required_text in AGENT_COORDINATION_REQUIREMENTS.items():
+        path = ROOT / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HarnessFailure(f"cannot read {relative}: {exc}") from exc
+        missing = [
+            value
+            for value in (AGENT_COORDINATION_MARKER, *required_text)
+            if value not in text
+        ]
+        if missing:
+            raise HarnessFailure(
+                "WHAT: agent coordination contract drifted in "
+                f"{relative}; missing {missing}.\n"
+                "WHY: parallel workers could share a write surface, overwrite "
+                "the control plane, or turn an unverified handoff into completion.\n"
+                "FIX: restore the v1 trigger, writer isolation, disjoint ownership, "
+                "lead-only integration and evidence, structured handoff, and "
+                "risk-based read-only review language; then rerun audit."
             )
 
 
@@ -356,10 +568,69 @@ def config_digest(config: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def feature_binding_pairs(feature: dict[str, Any]) -> set[tuple[str, str]]:
+    return {
+        (binding["level"], binding["command_id"])
+        for requirement in feature.get("verification", [])
+        for binding in requirement.get("bindings", [])
+        if isinstance(binding, dict)
+        and isinstance(binding.get("level"), str)
+        and isinstance(binding.get("command_id"), str)
+    }
+
+
+def selected_gate_commands(
+    config: dict[str, Any],
+    levels: list[str],
+    *,
+    purpose: str,
+    feature: dict[str, Any] | None = None,
+) -> list[tuple[str, dict[str, Any]]]:
+    if purpose not in ("startup", "profile", "complete"):
+        raise HarnessFailure(f"unsupported gate execution purpose: {purpose}")
+    if purpose == "complete" and feature is None:
+        raise HarnessFailure("complete gate selection requires one feature.")
+    bindings = feature_binding_pairs(feature or {})
+    selected: list[tuple[str, dict[str, Any]]] = []
+    for level in levels:
+        for command in config["gates"][level]["commands"]:
+            scope = command.get("execution_scope", "profile")
+            include = scope == "profile" or (
+                purpose == "complete" and (level, command["id"]) in bindings
+            )
+            if include:
+                selected.append((level, command))
+    return selected
+
+
+def selected_gate_pairs(
+    config: dict[str, Any],
+    levels: list[str],
+    *,
+    purpose: str,
+    feature: dict[str, Any] | None = None,
+) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for level in levels:
+        if level == "V0":
+            pairs.append(("V0", "harness-audit"))
+        pairs.extend(
+            (selected_level, command["id"])
+            for selected_level, command in selected_gate_commands(
+                config,
+                [level],
+                purpose=purpose,
+                feature=feature,
+            )
+        )
+    return pairs
+
+
 def execution_config_digest(
     config: dict[str, Any],
     risk: str,
     required_levels: list[str],
+    feature: dict[str, Any],
 ) -> str:
     """Hash only configuration that can affect the selected completion run."""
     startup_profile = config["startup_profile"]
@@ -369,14 +640,39 @@ def execution_config_digest(
         if name in config["risk_profiles"]
     }
     projection = {
+        "execution_contract_version": EXECUTION_CONTRACT_VERSION,
         "schema_version": config["schema_version"],
         "configured": config["configured"],
         "project": config["project"],
         "paths": config["paths"],
         "commands": config["commands"],
-        "runner": config["runner"],
+        "runner": {
+            **config["runner"],
+            "max_gate_commands_per_run": config["runner"].get(
+                "max_gate_commands_per_run", DEFAULT_MAX_GATE_COMMANDS_PER_RUN
+            ),
+            "max_gate_timeout_seconds_per_run": config["runner"].get(
+                "max_gate_timeout_seconds_per_run",
+                DEFAULT_MAX_GATE_TIMEOUT_SECONDS_PER_RUN,
+            ),
+            "max_combined_output_bytes": config["runner"].get(
+                "max_combined_output_bytes", DEFAULT_MAX_COMBINED_OUTPUT_BYTES
+            ),
+        },
         "gates": {
-            level: config["gates"][level]
+            level: {
+                "description": config["gates"][level]["description"],
+                "commands": [
+                    command
+                    for selected_level, command in selected_gate_commands(
+                        config,
+                        required_levels,
+                        purpose="complete",
+                        feature=feature,
+                    )
+                    if selected_level == level
+                ],
+            }
             for level in required_levels
         },
         "risk_profiles": relevant_profiles,
@@ -391,12 +687,101 @@ def execution_config_digest(
     return hashlib.sha256(payload).hexdigest()
 
 
-def sha256_file(path: Path) -> str:
+def sha256_file(path: Path, *, expected_size: int | None = None) -> str:
     digest = hashlib.sha256()
+    total = 0
     with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        while True:
+            read_size = 1024 * 1024
+            if expected_size is not None:
+                read_size = min(read_size, expected_size + 1 - total)
+                if read_size <= 0:
+                    break
+            chunk = handle.read(read_size)
+            if not chunk:
+                break
+            total += len(chunk)
+            if expected_size is not None and total > expected_size:
+                raise HarnessFailure(
+                    f"WHAT: {path.relative_to(ROOT)} grew while it was being hashed.\n"
+                    "WHY: a concurrent file growth must not bypass the tracked-byte "
+                    "budget.\nFIX: stop concurrent writers and retry from a stable file."
+                )
             digest.update(chunk)
+    if expected_size is not None:
+        try:
+            final_size = path.stat().st_size
+        except OSError as exc:
+            raise HarnessFailure(f"cannot recheck tracked file {path}: {exc}") from exc
+        if total != expected_size or final_size != expected_size:
+            raise HarnessFailure(
+                f"WHAT: {path.relative_to(ROOT)} changed size while it was being hashed.\n"
+                "WHY: tracked evidence must come from one stable file snapshot.\n"
+                "FIX: stop concurrent writers and rerun the audit."
+            )
     return digest.hexdigest()
+
+
+class TrackedFileDigestCache:
+    """Hash each unique tracked path once within one repository audit."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, tuple[str, int]] = {}
+        self.total_bytes = 0
+
+    def digest(self, path: Path, normalized: str, feature_id: str) -> str:
+        key = ntpath.normcase(normalized) if os.name == "nt" else normalized
+        cached = self.values.get(key)
+        if cached is not None:
+            return cached[0]
+        try:
+            size = path.stat().st_size
+        except OSError as exc:
+            raise HarnessFailure(
+                f"cannot inspect tracked file {normalized!r}: {exc}"
+            ) from exc
+        if self.total_bytes + size > MAX_UNIQUE_TRACKED_BYTES:
+            raise HarnessFailure(
+                "WHAT: unique tracked files exceed the per-audit byte budget of "
+                f"{MAX_UNIQUE_TRACKED_BYTES} bytes while validating {feature_id}.\n"
+                "WHY: hashing an unbounded evidence set can make every resident-agent "
+                "startup stall.\nFIX: track the smallest authoritative files, split "
+                "generated or binary evidence into a focused gate, or reduce duplication."
+            )
+        value = sha256_file(path, expected_size=size)
+        self.values[key] = (value, size)
+        self.total_bytes += size
+        return value
+
+
+class ReceiptPayloadCache:
+    """Read, hash, and parse each unique receipt once per feature audit."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, tuple[str, dict[str, Any]]] = {}
+        self.total_bytes = 0
+
+    def load(self, path: Path, normalized: str) -> tuple[str, dict[str, Any]]:
+        key = ntpath.normcase(normalized) if os.name == "nt" else normalized
+        cached = self.values.get(key)
+        if cached is not None:
+            return cached
+        payload = read_bounded_json_bytes(path)
+        if self.total_bytes + len(payload) > MAX_UNIQUE_RECEIPT_BYTES_PER_AUDIT:
+            raise HarnessFailure(
+                "WHAT: unique receipt payloads exceed the per-audit byte budget of "
+                f"{MAX_UNIQUE_RECEIPT_BYTES_PER_AUDIT} bytes.\nWHY: historical receipt "
+                "validation must not amplify into unbounded disk I/O.\nFIX: keep the "
+                "bounded evidence window small, archive large historical receipts, or "
+                "re-complete with concise gate records."
+            )
+        result = (
+            hashlib.sha256(payload).hexdigest(),
+            parse_json_object(path, payload),
+        )
+        self.values[key] = result
+        self.total_bytes += len(payload)
+        return result
 
 
 def is_link_like(path: Path) -> bool:
@@ -448,7 +833,7 @@ def runtime_identity_digest(identity: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def current_revision() -> str:
+def current_revision(timeout_seconds: float = GIT_QUERY_TIMEOUT_SECONDS) -> str:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -456,7 +841,14 @@ def current_revision() -> str:
             text=True,
             capture_output=True,
             check=False,
+            timeout=timeout_seconds,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise HarnessFailure(
+            f"WHAT: git rev-parse exceeded {timeout_seconds:g} seconds.\n"
+            "WHY: revision evidence must not make repository audit wait indefinitely.\n"
+            "FIX: repair the local Git process/filesystem and retry."
+        ) from exc
     except OSError:
         return "unversioned"
     if result.returncode == 0:
@@ -521,6 +913,7 @@ def validate_runner_options(label: str, definition: dict[str, Any]) -> None:
     if timeout is not None and (
         not isinstance(timeout, (int, float))
         or isinstance(timeout, bool)
+        or (isinstance(timeout, float) and not math.isfinite(timeout))
         or timeout <= 0
         or timeout > 86400
     ):
@@ -546,6 +939,15 @@ def validate_argv(label: str, argv: Any, *, allow_empty: bool) -> list[str]:
         raise HarnessFailure(f"{label}.argv must be an array of non-empty strings.")
     if not allow_empty and not argv:
         raise HarnessFailure(f"{label}.argv cannot be empty.")
+    if len(argv) > MAX_ARGV_ITEMS:
+        raise HarnessFailure(
+            f"{label}.argv has {len(argv)} items; the limit is {MAX_ARGV_ITEMS}."
+        )
+    argv_bytes = sum(len(item.encode("utf-8")) for item in argv)
+    if argv_bytes > MAX_ARGV_BYTES:
+        raise HarnessFailure(
+            f"{label}.argv is {argv_bytes} bytes; the limit is {MAX_ARGV_BYTES}."
+        )
     if PYTHON_TOKEN in argv[1:]:
         raise HarnessFailure(
             f"{label}.argv may use {PYTHON_TOKEN!r} only as argv[0]."
@@ -579,6 +981,10 @@ def validate_command_definition(name: str, definition: Any) -> None:
         )
     if required and not argv:
         raise HarnessFailure(f"required command {name!r} has no argv.")
+    if isinstance(reason, str) and len(reason.encode("utf-8")) > 2048:
+        raise HarnessFailure(
+            f"command {name!r}.unavailable_reason exceeds 2048 bytes."
+        )
     validate_runner_options(f"command {name!r}", definition)
 
 
@@ -589,8 +995,68 @@ def validate_gate_command(level: str, index: int, command: Any) -> None:
     for field in ("id", "name", "why", "fix"):
         if not isinstance(command.get(field), str) or not command[field].strip():
             raise HarnessFailure(f"{label}.{field} must be a non-empty string.")
+        maximum = 256 if field in ("id", "name") else 2048
+        if len(command[field].encode("utf-8")) > maximum:
+            raise HarnessFailure(f"{label}.{field} exceeds {maximum} bytes.")
     validate_argv(label, command.get("argv"), allow_empty=False)
+    execution_scope = command.get("execution_scope", "profile")
+    if execution_scope not in ("profile", "feature"):
+        raise HarnessFailure(
+            f"{label}.execution_scope must be either 'profile' or 'feature'."
+        )
     validate_runner_options(label, command)
+
+
+def command_invokes_root_init(argv: list[str], cwd_relative: str = ".") -> bool:
+    cwd = safe_repo_path(cwd_relative)
+    root_targets = {
+        os.path.normcase(str((ROOT / "init.sh").resolve())),
+        os.path.normcase(str((ROOT / "init.ps1").resolve())),
+    }
+    harness_target = os.path.normcase(str((ROOT / "scripts/harness.py").resolve()))
+
+    def resolved_token(value: str) -> str:
+        normalized = value.replace("\\", os.sep).replace("/", os.sep)
+        candidate = Path(normalized)
+        path = candidate if candidate.is_absolute() else cwd / candidate
+        return os.path.normcase(str(path.resolve()))
+
+    executable_name = Path(argv[0].replace("\\", "/")).name.lower()
+    if executable_name in ("init.sh", "init.ps1"):
+        return resolved_token(argv[0]) in root_targets
+    if resolved_token(argv[0]) == harness_target:
+        return len(argv) > 1 and argv[1].lower() == "init"
+
+    if executable_name in ("sh", "bash", "zsh") and len(argv) > 1:
+        script = next((item for item in argv[1:] if not item.startswith("-")), None)
+        return script is not None and resolved_token(script) in root_targets
+
+    if executable_name in ("pwsh", "pwsh.exe", "powershell", "powershell.exe"):
+        for index, item in enumerate(argv[:-1]):
+            if item.lower() in ("-file", "/file"):
+                return resolved_token(argv[index + 1]) in root_targets
+        return False
+
+    if executable_name == "{python}" or executable_name in (
+        "py",
+        "py.exe",
+        "python",
+        "python.exe",
+        "python3",
+        "python3.exe",
+    ):
+        script_index = 1
+        while script_index < len(argv) and argv[script_index].startswith("-"):
+            option = argv[script_index]
+            if option in ("-c", "-m"):
+                return False
+            script_index += 2 if option in ("-W", "-X") else 1
+        return (
+            script_index + 1 < len(argv)
+            and resolved_token(argv[script_index]) == harness_target
+            and argv[script_index + 1].lower() == "init"
+        )
+    return False
 
 
 def validate_config(config: dict[str, Any], *, template_mode: bool) -> None:
@@ -618,6 +1084,11 @@ def validate_config(config: dict[str, Any], *, template_mode: bool) -> None:
     for field in ("name", "summary", "architecture"):
         if not isinstance(project.get(field), str) or not project[field].strip():
             raise HarnessFailure(f"config.project.{field} must be a non-empty string.")
+        maximum = {"name": 256, "summary": 2048, "architecture": 1024}[field]
+        if len(project[field].encode("utf-8")) > maximum:
+            raise HarnessFailure(
+                f"config.project.{field} exceeds {maximum} bytes."
+            )
 
     paths = config.get("paths")
     if not isinstance(paths, dict):
@@ -638,6 +1109,7 @@ def validate_config(config: dict[str, Any], *, template_mode: bool) -> None:
     if (
         not isinstance(default_timeout, (int, float))
         or isinstance(default_timeout, bool)
+        or (isinstance(default_timeout, float) and not math.isfinite(default_timeout))
         or default_timeout <= 0
         or default_timeout > 86400
     ):
@@ -655,6 +1127,47 @@ def validate_config(config: dict[str, Any], *, template_mode: bool) -> None:
         raise HarnessFailure(
             "config.runner.max_output_bytes must be between 1024 and 10485760."
         )
+    max_commands = runner.get(
+        "max_gate_commands_per_run", DEFAULT_MAX_GATE_COMMANDS_PER_RUN
+    )
+    if (
+        not isinstance(max_commands, int)
+        or isinstance(max_commands, bool)
+        or max_commands < 1
+        or max_commands > MAX_GATE_COMMANDS_PER_RUN
+    ):
+        raise HarnessFailure(
+            "config.runner.max_gate_commands_per_run must be between 1 and "
+            f"{MAX_GATE_COMMANDS_PER_RUN}."
+        )
+    max_timeout = runner.get(
+        "max_gate_timeout_seconds_per_run",
+        DEFAULT_MAX_GATE_TIMEOUT_SECONDS_PER_RUN,
+    )
+    if (
+        not isinstance(max_timeout, (int, float))
+        or isinstance(max_timeout, bool)
+        or (isinstance(max_timeout, float) and not math.isfinite(max_timeout))
+        or max_timeout <= 0
+        or max_timeout > MAX_GATE_TIMEOUT_SECONDS_PER_RUN
+    ):
+        raise HarnessFailure(
+            "config.runner.max_gate_timeout_seconds_per_run must be greater than 0 "
+            f"and at most {MAX_GATE_TIMEOUT_SECONDS_PER_RUN}."
+        )
+    max_combined_output = runner.get(
+        "max_combined_output_bytes", DEFAULT_MAX_COMBINED_OUTPUT_BYTES
+    )
+    if (
+        not isinstance(max_combined_output, int)
+        or isinstance(max_combined_output, bool)
+        or max_combined_output < 2 * 1024
+        or max_combined_output > MAX_COMBINED_OUTPUT_BYTES
+    ):
+        raise HarnessFailure(
+            "config.runner.max_combined_output_bytes must be between 2048 and "
+            f"{MAX_COMBINED_OUTPUT_BYTES}."
+        )
 
     gates = config.get("gates")
     if not isinstance(gates, dict):
@@ -668,6 +1181,11 @@ def validate_config(config: dict[str, Any], *, template_mode: bool) -> None:
         gate_commands = gate.get("commands")
         if not isinstance(gate_commands, list):
             raise HarnessFailure(f"config.gates.{level}.commands must be an array.")
+        if len(gate_commands) > MAX_GATE_COMMANDS_PER_LEVEL:
+            raise HarnessFailure(
+                f"config.gates.{level}.commands has {len(gate_commands)} entries; "
+                f"the limit is {MAX_GATE_COMMANDS_PER_LEVEL}."
+            )
         command_ids: set[str] = set()
         for index, command in enumerate(gate_commands):
             validate_gate_command(level, index, command)
@@ -714,18 +1232,68 @@ def validate_config(config: dict[str, Any], *, template_mode: bool) -> None:
         raise HarnessFailure("startup_profile must name a declared risk profile.")
     if configured and not profiles[startup_profile]["enabled"]:
         raise HarnessFailure("startup_profile must be enabled in a configured project.")
+    startup_levels = profiles[startup_profile]["levels"]
+    for level in startup_levels:
+        startup_commands = [
+            command
+            for command in gates[level]["commands"]
+            if command.get("execution_scope", "profile") == "profile"
+        ]
+        for command in startup_commands:
+            if command_invokes_root_init(
+                command["argv"], command.get("cwd", ".")
+            ):
+                raise HarnessFailure(
+                    "WHAT: startup profile "
+                    f"{startup_profile!r} can invoke init again through "
+                    f"{level}/{command['id']}.\nWHY: a startup gate that re-enters init "
+                    "can recurse until timeout and leave descendant processes.\nFIX: "
+                    "mark the bootstrap self-check execution_scope='feature', choose "
+                    "docs_only, or replace it with a non-recursive profile-scope check."
+                )
+        if configured and level != "V0" and not startup_commands:
+            raise HarnessFailure(
+                "WHAT: startup profile "
+                f"{startup_profile!r} selects {level} but has no profile-scope command.\n"
+                "WHY: feature-scoped checks are intentionally skipped during startup, "
+                "so the configured profile would overstate its startup coverage.\nFIX: "
+                "add one lightweight non-recursive profile-scope command for the level "
+                "or use a lower startup profile."
+            )
 
     clean = config.get("clean_state")
     if not isinstance(clean, dict):
         raise HarnessFailure("config.clean_state must be an object.")
     sections = clean.get("required_state_sections")
     globs = clean.get("forbidden_globs")
+    excluded_dirs = clean.get("excluded_dirs", [".git"])
     if not isinstance(sections, list) or not sections or any(
         not isinstance(item, str) or not item for item in sections
     ):
         raise HarnessFailure("clean_state.required_state_sections must be non-empty strings.")
     if not isinstance(globs, list) or any(not isinstance(item, str) or not item for item in globs):
         raise HarnessFailure("clean_state.forbidden_globs must contain strings.")
+    if len(globs) > MAX_CLEAN_STATE_GLOBS:
+        raise HarnessFailure(
+            f"clean_state.forbidden_globs has {len(globs)} entries; the limit is "
+            f"{MAX_CLEAN_STATE_GLOBS}."
+        )
+    if (
+        not isinstance(excluded_dirs, list)
+        or any(not isinstance(item, str) or not item for item in excluded_dirs)
+        or len(excluded_dirs) > MAX_CLEAN_STATE_EXCLUDED_DIRS
+    ):
+        raise HarnessFailure(
+            "clean_state.excluded_dirs must contain at most "
+            f"{MAX_CLEAN_STATE_EXCLUDED_DIRS} non-empty relative paths."
+        )
+    for relative in excluded_dirs:
+        candidate = Path(relative)
+        if candidate.is_absolute() or ".." in candidate.parts or candidate == Path("."):
+            raise HarnessFailure(
+                f"clean_state.excluded_dirs contains an unsafe path: {relative!r}."
+            )
+        safe_repo_path(relative)
 
 
 def feature_path(config: dict[str, Any]) -> Path:
@@ -737,7 +1305,9 @@ def state_path(config: dict[str, Any]) -> Path:
 
 
 def tracked_file_entries(
-    config: dict[str, Any], feature: dict[str, Any]
+    config: dict[str, Any],
+    feature: dict[str, Any],
+    digest_cache: TrackedFileDigestCache | None = None,
 ) -> list[dict[str, str]]:
     feature_id = feature.get("id", "unknown")
     tracked = feature.get("tracked_files")
@@ -745,6 +1315,12 @@ def tracked_file_entries(
         raise HarnessFailure(f"{feature_id}.tracked_files must be a non-empty array.")
     if any(not isinstance(item, str) or not item for item in tracked):
         raise HarnessFailure(f"{feature_id}.tracked_files must contain non-empty strings.")
+    if len(tracked) > MAX_TRACKED_FILES_PER_FEATURE:
+        raise HarnessFailure(
+            f"{feature_id}.tracked_files has {len(tracked)} paths; the per-feature "
+            f"limit is {MAX_TRACKED_FILES_PER_FEATURE}. Keep only authoritative "
+            "evidence inputs and verify large generated sets through a focused gate."
+        )
     tracked_keys = [
         ntpath.normcase(item) if os.name == "nt" else item for item in tracked
     ]
@@ -757,6 +1333,7 @@ def tracked_file_entries(
         Path(config["paths"]["state"]).as_posix(),
     }
     evidence_dir = Path(config["paths"]["evidence_dir"])
+    cache = digest_cache or TrackedFileDigestCache()
     entries: list[dict[str, str]] = []
     for relative in sorted(tracked):
         candidate = Path(relative)
@@ -782,7 +1359,12 @@ def tracked_file_entries(
             raise HarnessFailure(
                 f"{feature_id} tracked file does not exist or is not regular: {relative}"
             )
-        entries.append({"path": normalized, "sha256": sha256_file(path)})
+        entries.append(
+            {
+                "path": normalized,
+                "sha256": cache.digest(path, normalized, feature_id),
+            }
+        )
     return entries
 
 
@@ -791,12 +1373,16 @@ def tracked_files_digest(entries: list[dict[str, str]]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def revision_is_current_or_ancestor(receipt_revision: str) -> bool:
-    current = current_revision()
+def revision_is_current_or_ancestor(
+    receipt_revision: str,
+    current: str | None = None,
+    timeout_seconds: float = GIT_QUERY_TIMEOUT_SECONDS,
+) -> bool:
+    current = current if current is not None else current_revision(timeout_seconds)
     if receipt_revision == current:
         return True
     if receipt_revision == "unversioned" or current == "unversioned":
-        return True
+        return False
     try:
         result = subprocess.run(
             ["git", "merge-base", "--is-ancestor", receipt_revision, current],
@@ -804,10 +1390,57 @@ def revision_is_current_or_ancestor(receipt_revision: str) -> bool:
             text=True,
             capture_output=True,
             check=False,
+            timeout=timeout_seconds,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise HarnessFailure(
+            f"WHAT: git merge-base exceeded {timeout_seconds:g} seconds.\n"
+            "WHY: receipt ancestry checks must have a finite wall-clock boundary.\n"
+            "FIX: repair the local Git graph/filesystem and retry."
+        ) from exc
     except OSError:
         return False
     return result.returncode == 0
+
+
+class GitRevisionCache:
+    """Bound duplicate revision and ancestry queries within one feature audit."""
+
+    def __init__(self) -> None:
+        self.current: str | None = None
+        self.ancestors: dict[tuple[str, str], bool] = {}
+        self.deadline = time.monotonic() + MAX_GIT_QUERY_SECONDS_PER_AUDIT
+
+    def remaining_seconds(self) -> float:
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise HarnessFailure(
+                "WHAT: receipt Git queries exhausted the per-audit wall-clock budget "
+                f"of {MAX_GIT_QUERY_SECONDS_PER_AUDIT} seconds.\nWHY: many ancestry "
+                "checks must not multiply resident-agent startup time.\nFIX: compact "
+                "passing evidence revisions or repair the local Git graph."
+            )
+        return min(GIT_QUERY_TIMEOUT_SECONDS, remaining)
+
+    def is_current_or_ancestor(self, receipt_revision: str) -> bool:
+        if self.current is None:
+            self.current = current_revision(self.remaining_seconds())
+        key = (receipt_revision, self.current)
+        if key not in self.ancestors:
+            if len(self.ancestors) >= MAX_GIT_ANCESTRY_QUERIES_PER_AUDIT:
+                raise HarnessFailure(
+                    "WHAT: receipt audit requires more than "
+                    f"{MAX_GIT_ANCESTRY_QUERIES_PER_AUDIT} distinct Git ancestry "
+                    "queries.\nWHY: per-receipt subprocesses can multiply startup cost.\n"
+                    "FIX: reduce the operational feature ledger below its declared "
+                    "maximum and archive older completed planning records."
+                )
+            self.ancestors[key] = revision_is_current_or_ancestor(
+                receipt_revision,
+                self.current,
+                self.remaining_seconds(),
+            )
+        return self.ancestors[key]
 
 
 def validate_receipt_reference(
@@ -816,6 +1449,9 @@ def validate_receipt_reference(
     evidence: Any,
     *,
     check_freshness: bool,
+    current_tracked_entries: list[dict[str, str]] | None = None,
+    receipt_cache: ReceiptPayloadCache | None = None,
+    revision_cache: GitRevisionCache | None = None,
 ) -> None:
     feature_id = feature["id"]
     if not isinstance(evidence, dict):
@@ -826,12 +1462,12 @@ def validate_receipt_reference(
     receipt_path = safe_repo_path(receipt)
     if not receipt_path.is_file():
         raise HarnessFailure(f"{feature_id} receipt does not exist: {receipt}")
-    receipt_sha256 = sha256_file(receipt_path)
+    active_receipt_cache = receipt_cache or ReceiptPayloadCache()
+    receipt_sha256, receipt_data = active_receipt_cache.load(receipt_path, receipt)
     if evidence.get("receipt_sha256") != receipt_sha256:
         raise HarnessFailure(
             f"{feature_id} receipt digest is missing or does not match: {receipt}"
         )
-    receipt_data = read_json(receipt_path)
     if receipt_data.get("feature_id") != feature_id or receipt_data.get("result") != "passing":
         raise HarnessFailure(f"{feature_id} receipt is not a matching passing result: {receipt}")
     receipt_schema = receipt_data.get("schema_version")
@@ -928,6 +1564,7 @@ def validate_receipt_reference(
             if (
                 not isinstance(value, (int, float))
                 or isinstance(value, bool)
+                or (isinstance(value, float) and not math.isfinite(value))
                 or value < 0
             ):
                 raise HarnessFailure(
@@ -981,11 +1618,16 @@ def validate_receipt_reference(
         config,
         receipt_data["risk_profile"],
         receipt_data["required_levels"],
+        feature,
     ):
         stale.append("executed configuration contract changed")
     if receipt_data.get("verification_sha256") != verification_digest(feature):
         stale.append("feature verification or risk definition changed")
-    current_entries = tracked_file_entries(config, feature)
+    current_entries = (
+        current_tracked_entries
+        if current_tracked_entries is not None
+        else tracked_file_entries(config, feature)
+    )
     if receipt_data.get("tracked_files") != current_entries:
         stale.append("one or more tracked files changed")
     if receipt_data.get("tracked_files_sha256") != tracked_files_digest(current_entries):
@@ -998,14 +1640,12 @@ def validate_receipt_reference(
     ):
         stale.append("receipt risk profile or required levels changed")
     else:
-        expected_pairs: list[tuple[str, str]] = []
-        for level in receipt_data["required_levels"]:
-            if level == "V0":
-                expected_pairs.append(("V0", "harness-audit"))
-            expected_pairs.extend(
-                (level, command["id"])
-                for command in config["gates"][level]["commands"]
-            )
+        expected_pairs = selected_gate_pairs(
+            config,
+            receipt_data["required_levels"],
+            purpose="complete",
+            feature=feature,
+        )
         actual_pairs = [
             (record["level"], record["command_id"])
             for record in receipt_data["executed"]
@@ -1021,7 +1661,8 @@ def validate_receipt_reference(
         except HarnessFailure:
             stale.append("receipt does not prove every feature verification binding")
     receipt_revision = receipt_data.get("revision")
-    if not isinstance(receipt_revision, str) or not revision_is_current_or_ancestor(
+    active_revision_cache = revision_cache or GitRevisionCache()
+    if not isinstance(receipt_revision, str) or not active_revision_cache.is_current_or_ancestor(
         receipt_revision
     ):
         stale.append("recorded Git revision is not current or an ancestor")
@@ -1054,6 +1695,12 @@ def validate_features(
         )
     if not isinstance(features, list):
         raise HarnessFailure("feature_list.json features must be an array.")
+    if len(features) > MAX_FEATURES:
+        raise HarnessFailure(
+            f"feature_list.json has {len(features)} features; the audit limit is "
+            f"{MAX_FEATURES}. Archive completed planning detail outside the operational "
+            "ledger and keep only actionable feature records."
+        )
 
     maximum = rules.get("max_active_features")
     if (
@@ -1074,6 +1721,9 @@ def validate_features(
         for source in source_map.get("sources", [])
         if isinstance(source, dict) and isinstance(source.get("id"), str)
     }
+    tracked_digest_cache = TrackedFileDigestCache()
+    receipt_cache = ReceiptPayloadCache()
+    revision_cache = GitRevisionCache()
     for index, feature in enumerate(features):
         if not isinstance(feature, dict):
             raise HarnessFailure(f"feature #{index + 1} must be an object.")
@@ -1083,6 +1733,18 @@ def validate_features(
         if feature_id in ids:
             raise HarnessFailure(f"duplicate feature id: {feature_id}")
         ids.add(feature_id)
+        for field, maximum_bytes in (
+            ("title", 512),
+            ("behavior", 4096),
+            ("notes", 4096),
+        ):
+            value = feature.get(field)
+            if not isinstance(value, str):
+                raise HarnessFailure(f"{feature_id}.{field} must be a string.")
+            if len(value.encode("utf-8")) > maximum_bytes:
+                raise HarnessFailure(
+                    f"{feature_id}.{field} exceeds {maximum_bytes} bytes."
+                )
 
         status = feature.get("status")
         if status not in legend:
@@ -1095,6 +1757,11 @@ def validate_features(
         verification = feature.get("verification")
         if not isinstance(verification, list) or not verification:
             raise HarnessFailure(f"{feature_id} must declare executable verification.")
+        if len(verification) > MAX_VERIFICATION_REQUIREMENTS_PER_FEATURE:
+            raise HarnessFailure(
+                f"{feature_id}.verification has {len(verification)} requirements; "
+                f"the limit is {MAX_VERIFICATION_REQUIREMENTS_PER_FEATURE}."
+            )
         requirement_ids: set[str] = set()
         available_bindings = {("V0", "harness-audit")}
         for level in ALL_LEVELS:
@@ -1128,6 +1795,11 @@ def validate_features(
                 raise HarnessFailure(
                     f"{feature_id}.{requirement_id}.bindings must be non-empty."
                 )
+            if len(bindings) > MAX_BINDINGS_PER_REQUIREMENT:
+                raise HarnessFailure(
+                    f"{feature_id}.{requirement_id}.bindings has {len(bindings)} "
+                    f"entries; the limit is {MAX_BINDINGS_PER_REQUIREMENT}."
+                )
             for binding in bindings:
                 if not isinstance(binding, dict):
                     raise HarnessFailure(
@@ -1144,7 +1816,11 @@ def validate_features(
                         f"{feature_id}.{requirement_id} requires {pair[0]}, outside "
                         f"risk profile {risk_profile!r}."
                     )
-        tracked_file_entries(config, feature)
+        current_tracked_entries = tracked_file_entries(
+            config,
+            feature,
+            tracked_digest_cache,
+        )
         for field in ("evidence", "history", "sources"):
             if not isinstance(feature.get(field), list):
                 raise HarnessFailure(f"{feature_id}.{field} must be an array.")
@@ -1162,8 +1838,21 @@ def validate_features(
                 )
         if not feature["sources"]:
             raise HarnessFailure(f"{feature_id}.sources must be non-empty.")
+        if len(feature["sources"]) > MAX_SOURCES_PER_FEATURE:
+            raise HarnessFailure(
+                f"{feature_id}.sources has {len(feature['sources'])} entries; the "
+                f"limit is {MAX_SOURCES_PER_FEATURE}."
+            )
+        expanded_source_count = 0
         for reference in feature["sources"]:
-            expand_source_reference(reference, known_sources)
+            expanded_source_count += len(
+                expand_source_reference(reference, known_sources)
+            )
+            if expanded_source_count > MAX_EXPANDED_SOURCES_PER_FEATURE:
+                raise HarnessFailure(
+                    f"{feature_id}.sources expands to {expanded_source_count} edges; "
+                    f"the per-feature limit is {MAX_EXPANDED_SOURCES_PER_FEATURE}."
+                )
         if status == "passing" and rules.get("passing_requires_receipt"):
             if not feature["evidence"]:
                 raise HarnessFailure(f"{feature_id} is passing without a receipt.")
@@ -1176,6 +1865,9 @@ def validate_features(
                         receipt_freshness
                         and evidence_index == len(feature["evidence"]) - 1
                     ),
+                    current_tracked_entries=current_tracked_entries,
+                    receipt_cache=receipt_cache,
+                    revision_cache=revision_cache,
                 )
 
     if active > maximum:
@@ -1200,10 +1892,26 @@ def expand_source_reference(reference: str, known: set[str]) -> list[str]:
     if not match:
         raise HarnessFailure(f"invalid source reference syntax: {reference!r}")
     prefix, start_text, end_text = match.groups()
+    if len(start_text) > MAX_SOURCE_REFERENCE_DIGITS or (
+        end_text is not None and len(end_text) > MAX_SOURCE_REFERENCE_DIGITS
+    ):
+        raise HarnessFailure(
+            "WHAT: source reference numeric width exceeds the finite parser budget: "
+            f"{reference!r}.\nWHY: converting an unbounded integer can consume excessive "
+            "CPU before range validation.\nFIX: use existing bounded Source IDs."
+        )
     start = int(start_text)
     end = int(end_text) if end_text is not None else start
     if end < start:
         raise HarnessFailure(f"source reference range is reversed: {reference}")
+    expanded_count = end - start + 1
+    if expanded_count > MAX_EXPANDED_SOURCES_PER_REFERENCE:
+        raise HarnessFailure(
+            f"WHAT: source reference {reference!r} expands to {expanded_count} IDs; "
+            f"the limit is {MAX_EXPANDED_SOURCES_PER_REFERENCE}.\nWHY: range expansion "
+            "must be bounded before allocating a list.\nFIX: split the reference into "
+            "small ranges that name existing Sources."
+        )
     width = len(start_text)
     expanded = [f"{prefix}{value:0{width}d}" for value in range(start, end + 1)]
     missing = [source_id for source_id in expanded if source_id not in known]
@@ -1421,6 +2129,7 @@ def audit_repository(
         )
     validate_startup_context()
     validate_autonomous_improvement_contract()
+    validate_agent_coordination_contract()
     validate_audit_skill_contract()
     validate_claude_entrypoint()
     config = read_json(CONFIG_PATH)
@@ -1484,17 +2193,19 @@ def terminate_process_tree(
     *,
     platform_name: str | None = None,
     taskkill_runner: Any = subprocess.run,
+    signal_sender: Any = os.kill,
 ) -> None:
     effective_platform = os.name if platform_name is None else platform_name
-    if process.poll() is not None:
-        return
+    parent_running = process.poll() is None
     if effective_platform == "nt":
         try:
-            process.send_signal(getattr(signal, "CTRL_BREAK_EVENT", 1))
-            process.wait(timeout=2)
-            return
-        except (OSError, subprocess.TimeoutExpired):
+            # GenerateConsoleCtrlEvent targets the process-group id even if its
+            # original leader has already exited.
+            signal_sender(process.pid, getattr(signal, "CTRL_BREAK_EVENT", 1))
+        except OSError:
             pass
+        if not parent_running:
+            return
         try:
             result = taskkill_runner(
                 [
@@ -1515,15 +2226,14 @@ def terminate_process_tree(
                     process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     pass
-                if process.poll() is not None:
-                    return
         except (OSError, subprocess.TimeoutExpired):
             pass
-        try:
-            process.kill()
-            process.wait(timeout=2)
-        except (OSError, subprocess.TimeoutExpired):
-            pass
+        if process.poll() is None:
+            try:
+                process.kill()
+                process.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
         return
 
     try:
@@ -1560,6 +2270,10 @@ def execute_gate_command(
     max_output_bytes = command.get(
         "max_output_bytes", config["runner"]["max_output_bytes"]
     )
+    max_combined_output_bytes = config["runner"].get(
+        "max_combined_output_bytes", DEFAULT_MAX_COMBINED_OUTPUT_BYTES
+    )
+    max_output_bytes = min(max_output_bytes, max_combined_output_bytes // 2)
     if not cwd.is_dir():
         raise HarnessFailure(
             f"WHAT: {level} command {command['name']!r} has an unavailable cwd."
@@ -1612,8 +2326,21 @@ def execute_gate_command(
         timed_out = True
         terminate_process_tree(process)
         return_code = process.returncode if process.returncode is not None else -1
+    descendant_leak = False
+    if not timed_out:
+        # The gate root has exited.  Signal its isolated process group once so
+        # background descendants cannot outlive a successful command, even when
+        # they redirected both captured streams.
+        terminate_process_tree(process)
+    reader_deadline = time.monotonic() + 1
     for reader in readers:
-        reader.join(timeout=3)
+        reader.join(timeout=max(0, reader_deadline - time.monotonic()))
+    descendant_leak = any(reader.is_alive() for reader in readers)
+    if descendant_leak:
+        terminate_process_tree(process)
+        cleanup_deadline = time.monotonic() + 2
+        for reader in readers:
+            reader.join(timeout=max(0, cleanup_deadline - time.monotonic()))
 
     duration_ms = round((time.monotonic() - started) * 1000)
     redacted_argv = [redact_text(item) for item in argv]
@@ -1632,14 +2359,15 @@ def execute_gate_command(
         "stdout_bytes": output.totals["stdout"],
         "stderr_bytes": output.totals["stderr"],
         "output_truncated": output.truncated["stdout"] or output.truncated["stderr"],
-        "timed_out": timed_out,
+        "timed_out": timed_out or descendant_leak,
     }
-    if timed_out or return_code != 0:
-        failure = (
-            f"timed out after {timeout_seconds} seconds"
-            if timed_out
-            else f"failed with exit code {return_code}"
-        )
+    if timed_out or descendant_leak or return_code != 0:
+        if timed_out:
+            failure = f"timed out after {timeout_seconds} seconds"
+        elif descendant_leak:
+            failure = "left descendant processes holding inherited output streams"
+        else:
+            failure = f"failed with exit code {return_code}"
         details = [
             f"WHAT: {level} command {command['name']!r} {failure}.",
             f"WHY: {command['why']}",
@@ -1677,12 +2405,66 @@ def run_gates(
     config: dict[str, Any],
     features_data: dict[str, Any],
     risk: str,
+    *,
+    purpose: str = "profile",
+    feature: dict[str, Any] | None = None,
+    repository_already_audited: bool = False,
 ) -> tuple[list[str], list[dict[str, Any]]]:
+    del features_data
     levels = gate_levels(config, risk)
+    selected_commands = selected_gate_commands(
+        config,
+        levels,
+        purpose=purpose,
+        feature=feature,
+    )
+    if purpose in ("startup", "profile"):
+        selected_levels = {level for level, _ in selected_commands}
+        missing_profile_levels = [
+            level for level in levels if level != "V0" and level not in selected_levels
+        ]
+        if missing_profile_levels:
+            raise HarnessFailure(
+                "WHAT: profile-wide verification selected levels with no profile-scope "
+                f"commands: {', '.join(missing_profile_levels)}.\nWHY: feature-scoped "
+                "commands require an explicit feature binding and cannot prove a generic "
+                "risk profile.\nFIX: add one focused profile-scope command for each level "
+                "or complete a bound feature with its declared risk profile."
+            )
+    runner = config["runner"]
+    max_commands = runner.get(
+        "max_gate_commands_per_run", DEFAULT_MAX_GATE_COMMANDS_PER_RUN
+    )
+    if len(selected_commands) > max_commands:
+        raise HarnessFailure(
+            f"WHAT: gate selection contains {len(selected_commands)} external commands; "
+            f"the per-run limit is {max_commands}.\nWHY: an unbounded command list makes "
+            "completion time and process fan-out unpredictable.\nFIX: mark focused checks "
+            "execution_scope='feature', remove duplicate gates, or raise the finite "
+            "budget only with measured evidence."
+        )
+    timeout_total = sum(
+        command.get("timeout_seconds", runner["default_timeout_seconds"])
+        for _, command in selected_commands
+    )
+    max_timeout_total = runner.get(
+        "max_gate_timeout_seconds_per_run",
+        DEFAULT_MAX_GATE_TIMEOUT_SECONDS_PER_RUN,
+    )
+    if timeout_total > max_timeout_total:
+        raise HarnessFailure(
+            f"WHAT: selected gate timeouts total {timeout_total} seconds; the per-run "
+            f"limit is {max_timeout_total} seconds.\nWHY: sequential timeout budgets add "
+            "up even when each command is individually bounded.\nFIX: shorten measured "
+            "timeouts, split the risk profile, or raise the finite aggregate budget "
+            "only with evidence."
+        )
+
     records: list[dict[str, Any]] = []
     for level in levels:
         if level == "V0":
-            audit_repository()
+            if not repository_already_audited:
+                audit_repository()
             records.append(
                 {
                     "level": "V0",
@@ -1704,8 +2486,9 @@ def run_gates(
                     "timed_out": False,
                 }
             )
-        for command in config["gates"][level]["commands"]:
-            records.append(execute_gate_command(config, level, command))
+        for selected_level, command in selected_commands:
+            if selected_level == level:
+                records.append(execute_gate_command(config, level, command))
     return levels, records
 
 
@@ -1733,23 +2516,97 @@ def assert_feature_verification(
         )
 
 
+def iter_clean_state_entries(
+    excluded_dirs: set[str],
+) -> Any:
+    """Stream repository entries without materializing one huge directory."""
+
+    stack = [ROOT]
+    while stack:
+        directory = stack.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    path = Path(entry.path)
+                    relative = path.relative_to(ROOT).as_posix()
+                    try:
+                        entry_stat = entry.stat(follow_symlinks=False)
+                    except OSError as exc:
+                        raise HarnessFailure(
+                            f"WHAT: clean-state scan cannot inspect {relative}: {exc}.\n"
+                            "WHY: silently skipped paths make completion evidence "
+                            "incomplete.\nFIX: restore readable local-file permissions or "
+                            "declare a safe project-owned excluded directory."
+                        ) from exc
+                    link_like = entry.is_symlink() or bool(
+                        getattr(entry_stat, "st_file_attributes", 0)
+                        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x00000400)
+                    )
+                    is_directory = stat.S_ISDIR(entry_stat.st_mode)
+                    should_descend = (
+                        is_directory
+                        and not link_like
+                        and entry.name != ".git"
+                        and os.path.normcase(relative) not in excluded_dirs
+                    )
+                    # Match the lexical entry itself even when it is a symlink;
+                    # never follow it into an external tree.
+                    yield path, not is_directory
+                    if should_descend:
+                        stack.append(path)
+        except HarnessFailure:
+            raise
+        except OSError as exc:
+            relative_directory = directory.relative_to(ROOT).as_posix() or "."
+            raise HarnessFailure(
+                f"WHAT: clean-state scan cannot read {relative_directory}: {exc}.\n"
+                "WHY: silently skipped subtrees make completion evidence incomplete.\n"
+                "FIX: restore readable local-file permissions or declare a safe "
+                "project-owned excluded directory."
+            ) from exc
+
+
 def validate_clean_state(
     config: dict[str, Any], features_data: dict[str, Any]
 ) -> None:
     validate_state(config, features_data, template_mode=False)
-    offenders: list[str] = []
-    for pattern in config["clean_state"]["forbidden_globs"]:
-        for path in ROOT.rglob(pattern):
-            if not path.is_file():
-                continue
-            relative = path.relative_to(ROOT)
-            if relative.parts and relative.parts[0] == ".git":
-                continue
-            offenders.append(str(relative))
-    if offenders:
+    offender_count = 0
+    reported_offenders: list[str] = []
+    reported_bytes = 0
+    patterns = config["clean_state"]["forbidden_globs"]
+    excluded_dirs = {
+        os.path.normcase(Path(relative).as_posix())
+        for relative in config["clean_state"].get("excluded_dirs", [".git"])
+    }
+    scanned_entries = 0
+    for path, matchable in iter_clean_state_entries(excluded_dirs):
+        scanned_entries += 1
+        if scanned_entries > MAX_CLEAN_STATE_SCAN_ENTRIES:
+            raise HarnessFailure(
+                "WHAT: clean-state scan exceeded "
+                f"{MAX_CLEAN_STATE_SCAN_ENTRIES} filesystem entries.\nWHY: "
+                "unbounded dependency or cache trees can stall completion.\nFIX: "
+                "add project-owned dependency/cache directories to "
+                "clean_state.excluded_dirs or remove unintended generated trees."
+            )
+        if not matchable:
+            continue
+        relative = path.relative_to(ROOT)
+        if any(relative.match(pattern) for pattern in patterns):
+            offender_count += 1
+            rendered = relative.as_posix()
+            rendered_bytes = len(rendered.encode("utf-8")) + 2
+            if reported_bytes + rendered_bytes <= MAX_CLEAN_STATE_REPORTED_BYTES:
+                reported_offenders.append(rendered)
+                reported_bytes += rendered_bytes
+    if offender_count:
+        sample = ", ".join(reported_offenders)
+        omitted = offender_count - len(reported_offenders)
+        if omitted:
+            sample += f", ... ({omitted} more omitted)"
         raise HarnessFailure(
-            "WHAT: clean-state check found temporary artifacts: "
-            + ", ".join(sorted(set(offenders)))
+            f"WHAT: clean-state check found {offender_count} temporary artifacts: "
+            + sample
             + "\nWHY: the next session cannot distinguish intentional files from leftovers."
             + "\nFIX: remove or intentionally rename the artifacts, then rerun completion."
         )
@@ -1939,7 +2796,14 @@ def complete_feature(feature_id: str, risk: str) -> None:
             f"{feature['risk_profile']!r}; completion cannot downgrade required gates."
         )
 
-    levels, records = run_gates(config, features_data, risk)
+    levels, records = run_gates(
+        config,
+        features_data,
+        risk,
+        purpose="complete",
+        feature=feature,
+        repository_already_audited=True,
+    )
     assert_feature_verification(feature, levels, records)
     validate_clean_state(config, features_data)
     tracked_entries = tracked_file_entries(config, feature)
@@ -1961,7 +2825,12 @@ def complete_feature(feature_id: str, risk: str) -> None:
         "executed": records,
         "skipped_levels": [level for level in ALL_LEVELS if level not in levels],
         "config_sha256": config_digest(config),
-        "execution_config_sha256": execution_config_digest(config, risk, levels),
+        "execution_config_sha256": execution_config_digest(
+            config,
+            risk,
+            levels,
+            feature,
+        ),
         "verification_sha256": verification_digest(feature),
         "tracked_files": tracked_entries,
         "tracked_files_sha256": tracked_files_digest(tracked_entries),
@@ -2038,7 +2907,7 @@ def cold_start_answers(
         for name, profile in config["risk_profiles"].items()
         if profile["enabled"]
     }
-    return {
+    answers = {
         "what": {
             "name": config["project"]["name"],
             "summary": config["project"]["summary"],
@@ -2068,6 +2937,42 @@ def cold_start_answers(
             },
         },
     }
+    rendered_size = len(
+        json.dumps(answers, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    if rendered_size > MAX_COLD_START_OUTPUT_BYTES:
+        raise HarnessFailure(
+            f"WHAT: cold-start output is {rendered_size} bytes; the limit is "
+            f"{MAX_COLD_START_OUTPUT_BYTES}.\nWHY: every resident-agent startup must stay "
+            "bounded.\nFIX: shorten project summary, command argv/reasons, profile "
+            "names/level lists, or the current feature title."
+        )
+    return answers
+
+
+def repository_identity() -> str:
+    return os.path.normcase(str(ROOT.resolve()))
+
+
+def inherited_init_stack() -> tuple[str | None, list[str]]:
+    raw = os.environ.get(INIT_REENTRANCY_ENV)
+    if raw is None:
+        return None, []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HarnessFailure(
+            f"WHAT: {INIT_REENTRANCY_ENV} is not a valid repository stack.\n"
+            "WHY: an ambiguous inherited guard cannot distinguish a cycle from a "
+            "different Core project.\nFIX: remove the stale environment value and retry."
+        ) from exc
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
+        raise HarnessFailure(
+            f"{INIT_REENTRANCY_ENV} must be a JSON array of repository identities."
+        )
+    return raw, [os.path.normcase(item) for item in value]
 
 
 def print_status(features_data: dict[str, Any], *, as_json: bool) -> None:
@@ -2141,19 +3046,57 @@ def main(argv: list[str] | None = None) -> int:
             audit_repository(template_mode=args.template)
             print("Core profile audit: healthy")
         elif args.command == "init":
-            config, features_data = audit_repository()
-            if args.setup:
-                run_declared_command(config, "setup")
-            levels, _ = run_gates(
-                config, features_data, config["startup_profile"]
+            previous_guard, init_stack = inherited_init_stack()
+            identity = repository_identity()
+            if identity in init_stack:
+                raise HarnessFailure(
+                    "WHAT: harness init was invoked while another init is active.\n"
+                    "WHY: indirect startup wrappers can otherwise recurse until timeout.\n"
+                    "FIX: remove init from startup profile commands; keep bootstrap "
+                    "self-checks feature-scoped and run them only from BOOT completion."
+                )
+            os.environ[INIT_REENTRANCY_ENV] = json.dumps(
+                [*init_stack, identity], ensure_ascii=False
             )
-            start = config["commands"]["start"]
-            start_value = (
-                command_label(start["argv"]) if start["argv"] else start["unavailable_reason"]
-            )
-            print(f"startup profile: {config['startup_profile']} ({', '.join(levels)})")
-            print(f"start: {start_value}")
-            print("Harness baseline: healthy")
+            try:
+                config, features_data = audit_repository()
+                if args.setup:
+                    run_declared_command(config, "setup")
+                    # Setup may mutate the project, so its pre-setup audit cannot
+                    # serve as V0 evidence after this explicit mutation boundary.
+                    config, features_data = audit_repository()
+                levels, _ = run_gates(
+                    config,
+                    features_data,
+                    config["startup_profile"],
+                    purpose="startup",
+                    repository_already_audited=True,
+                )
+                start = config["commands"]["start"]
+                start_value = (
+                    command_label(start["argv"])
+                    if start["argv"]
+                    else start["unavailable_reason"]
+                )
+                print(
+                    f"startup profile: {config['startup_profile']} "
+                    f"({', '.join(levels)})"
+                )
+                print(f"start: {start_value}")
+                print(
+                    "cold-start-summary: "
+                    + json.dumps(
+                        cold_start_answers(config, features_data),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+                print("Harness baseline: healthy")
+            finally:
+                if previous_guard is None:
+                    os.environ.pop(INIT_REENTRANCY_ENV, None)
+                else:
+                    os.environ[INIT_REENTRANCY_ENV] = previous_guard
         elif args.command == "cold-start":
             config, features_data = audit_repository()
             answers = cold_start_answers(config, features_data)
@@ -2167,7 +3110,13 @@ def main(argv: list[str] | None = None) -> int:
             run_declared_command(config, args.name)
         elif args.command == "verify":
             config, features_data = audit_repository()
-            levels, _ = run_gates(config, features_data, args.risk)
+            levels, _ = run_gates(
+                config,
+                features_data,
+                args.risk,
+                purpose="profile",
+                repository_already_audited=True,
+            )
             print(f"verification passed: {args.risk} ({', '.join(levels)})")
         elif args.command == "complete":
             complete_feature(args.feature_id, args.risk)

@@ -2,22 +2,24 @@
 
 ## 구현 상태
 
-2026-08-09 현재 아래 항목은 제안이 아니라 구현·Fixture 검증된 상태입니다.
+2026-08-10 현재 아래 항목은 제안이 아니라 구현·Fixture 검증된 상태입니다.
 
 | 항목 | 구현 | 검증 |
 | --- | --- | --- |
 | 복제 가능한 Core 프로필 | `template/core/` | 빈 임시 프로젝트 설치 |
 | 안전한 설정 파일 | `harness.config.json` 인자 배열 | 플레이스홀더·비활성 프로필 거부 |
 | 상태 전환·영수증 | `scripts/harness.py state/complete` | WIP=1, 차단, 재개, 회귀 |
-| 콜드 스타트 | `cold-start --json` | 5개 질문의 구조화 답변 |
+| 콜드 스타트 | init의 bounded summary + 명시적 `cold-start --json` | 한 audit로 일반 시작, 5개 질문의 구조화 재조회 |
 | 단계별 완료 게이트 | V0~V4 위험 프로필 | 실패 차단, 위험 하향 금지, 클린 상태 |
 | 기능별 실행 검증 | `verification.bindings` | 누락·프로필 밖·미실행 gate 거부 |
 | 증거 신선도 | schema-v4 전체 provenance + 실행 계약 config digest | 미실행 gate 변경 유지, 실행 계약·파일·runtime 회귀 거부 |
-| 제한 runner | repo `cwd`, timeout, bounded/redacted log | hang·대출력·누락 실행 파일 Fixture |
+| 제한 runner | repo `cwd`, command/총 timeout/combined output·process-group 예산 | hang·고아 child·대출력·과대 command set·누락 실행 파일 Fixture |
 | Claude Code 진입점 | root/Core `CLAUDE.md`의 `@AGENTS.md` import | root validator·설치본 audit·드리프트 실패 Fixture |
 | 상주 에이전트 커뮤니케이션 | 짧은 `AGENTS.md` 라우팅 + `docs/COMMUNICATION.md` | 빈 설치본의 언어·설명·시각화·증거·자기점검 계약 Fixture |
-| 자동 자기개선·컨텍스트 예산 | 상시 저장소 권한 + WIP/종료 루프 + 시작 파일 상한 + bounded 상태·증거 | 계약 제거·과대 파일·누적 배열 거부와 최근 window Fixture |
+| 자동 자기개선·컨텍스트 예산 | 상시 저장소 권한 + WIP/종료 루프 + 상시 합계·온디맨드 상한 + bounded 상태·증거 | 라우팅 모순·과대 파일·원장/추적량 거부 Fixture |
 | 호출형 하네스 건강 감사 | `.agents` 정본 + `.claude` 텍스트 포인터 | 빈 설치본의 정본·포인터·읽기 전용·드리프트 거부 Fixture |
+| 요청형 다중 에이전트 안전 계약 | 격리·직렬 통합 + worker/round/deadline/context 예산 | 계약 드리프트·비격리/무예산 중지·두 worktree 직렬 통합 Fixture |
+| 스타터 시작 비용 분리 | root `--quick`/`-Quick` + 기본 full | bounded Source/Core scan·15초 self-audit watchdog·전체 Fixture 의미 검증 |
 | 네이티브 Windows 어댑터 | `init.ps1`, current-Python token, Windows process tree | 정적·모의 Windows Fixture와 조건부 네이티브 실행 |
 | 자료 처분·독립 해석 | 65행 결정표 + 설치본 `source-map.json` | 원장 65/65·양방향 연결 |
 | 배포 수명주기 | `VERSION`, `LICENSE`, `NOTICE`, install manifest | 같은 버전 no-op·실제 patch upgrade·version guard·rollback·remove Fixture |
@@ -39,6 +41,7 @@
 - 사람용 상태 문서가 중복되지 않음
 - 시작 컨텍스트와 기능별 운영 이력이 기계적으로 bounded됨
 - 확인된 에이전트·하네스·루프 결함을 별도 명령 없이 한 번 자동 개선함
+- 요청된 병렬 worker를 하나의 WIP 기능·독립 worktree·lead 직렬 통합으로 제한
 - 위험이 커질 때만 검증·문서·관측 모듈을 승격
 - 모든 구성 요소의 출처·적용 조건·재검토·롤백을 추적
 
@@ -61,6 +64,7 @@ project/
 │   └── harness.py               # stdlib 기반 검사·상태 전환·명령 실행
 └── docs/
     ├── STATE.md                 # bounded current snapshot
+    ├── AGENT_COORDINATION.md    # 요청된 병렬 작업에서만 읽는 안전 계약
     ├── ARCHITECTURE.md          # 실제 경계가 생긴 뒤 채움
     ├── COMMUNICATION.md         # 사용자 설명·증거 보고·자기점검 계약
     ├── VALIDATION.md            # 위험별 검증 레벨과 황금 여정
@@ -83,13 +87,14 @@ project/
 | --- | --- | --- | --- |
 | 짧은 `AGENTS.md` | 요청·시작·작업·완료·종료 라우팅 | `SRC-CH-003..004`, `SRC-TPL-001`, `SRC-REF-006`, `SRC-ADV-003` | 너무 짧으면 공백, 너무 길면 SNR 저하 |
 | `docs/COMMUNICATION.md` | 한국어 존댓말·쉬운 설명·간결한 증거 보고·자동 종료 자기개선 | `SRC-CH-004..005`, `SRC-CH-007`, `SRC-CH-012`, `SRC-TPL-001`, `SRC-ADV-024` | 문서 하나 증가, 대신 상시 권한·안전 경계를 루트 라우터에서 분리 |
+| `docs/AGENT_COORDINATION.md` | 명시적 요청 때만 worker 격리·비중첩 소유권·인계·lead 통합·고위험 검토를 규정 | `SRC-CH-007..009`, `SRC-TPL-001`, `SRC-TPL-006`, `SRC-TPL-010`, `SRC-PRJ-004`, `SRC-PRJ-006` | 병렬 조정 비용이 생기지만 일반 세션에는 문서를 읽지 않음 |
 | `audit-harness-health` Skill | 현재 저장소 증거로 agent·harness·loop 철학을 읽기 전용 감사 | `SRC-CH-004..005`, `SRC-CH-007..012`, `SRC-TPL-001..002`, `SRC-ADV-024` | 호출 시에만 약 8 KiB 정본 로드, Claude 포인터는 2 KiB 미만 |
 | `harness.config.json` | 설치·시작·집중·전체 검증 명령을 안전한 배열로 선언 | `SRC-CH-002`, `SRC-CH-006`, `SRC-TPL-008`, `SRC-ADV-010` | 설정 파일 하나 증가, 대신 셸 `eval` 제거 |
 | `feature_list.json` | WIP=1, 상태, 검증, 증거, 근거 | `SRC-CH-007..008`, `SRC-TPL-006` | 작은 작업에도 약간의 기록 비용 |
 | `docs/STATE.md` | 현재 목표·검증·위험·다음 행동 | `SRC-CH-005`, `SRC-TPL-003`, `SRC-TPL-010` | 이력 로그로 비대해지지 않게 bounded 유지 |
 | `init.sh`·`init.ps1` + validator | 운영체제별 멱등 프리플라이트와 fail-loud 진단 | `SRC-CH-006`, `SRC-TPL-008`, `SRC-REF-001`, `SRC-REF-004` | 래퍼 2개를 동기화해야 하지만 네이티브 시작 경로가 명확함 |
 | `docs/ARCHITECTURE.md`·`VALIDATION.md` | 콜드 스타트 구조·검증 요약 | `SRC-CH-003`, `SRC-CH-009..010` | Core에는 짧은 요약만 두고 필요할 때 확장 |
-| Source·Component 원장 | 65개 근거와 21개 구성 요소의 양방향 추적 | `SRC-REF-002`, `SRC-ADV-025..026` | 원장 유지 비용 대신 독립 감사 가능 |
+| Source·Component 원장 | 65개 근거와 22개 구성 요소의 양방향 추적 | `SRC-REF-002`, `SRC-ADV-025..026` | 원장 유지 비용 대신 독립 감사 가능 |
 | 버전·라이선스·수명주기 | 안전한 복제·갱신·제거 경계 | `SRC-RES-001`, `SRC-ADV-002` | manifest 파일 증가, 대신 로컬 변경 보호 |
 
 `CLAUDE.md`는 첫 비어 있지 않은 줄의 `@AGENTS.md` import로 공통 규칙을
@@ -114,8 +119,12 @@ project/
 - 독립 평가자·루브릭: `SRC-CH-009`, `SRC-TPL-005`, `SRC-PRJ-006`
 
 Standard/Advanced는 후속 설계 카탈로그로만 유지합니다. 이를 패키징하는
-`HST-006`은 Core `0.3.0`의 `out_of_scope`이며, 관찰된 병목과 명시적
+`HST-006`은 Core `0.4.0`의 `out_of_scope`이며, 관찰된 병목과 명시적
 재범위 결정이 있는 미래 릴리스에서만 다시 엽니다.
+
+`HC-022`/`HST-016`은 호스트의 팀 생성·메시징·task claim·lease·프로세스
+잠금을 구현하지 않습니다. 사용자가 병렬 실행을 명시적으로 요청했을 때 기존
+호스트 기능을 안전하게 쓰는 좁은 Core 계약만 제공합니다.
 
 ## 실행 계약
 
@@ -241,8 +250,10 @@ redacted effective argv digest, `cwd`·timeout·출력 크기, 전체 설정 pro
 10. 자기개선 종료 조건·시작 컨텍스트 예산·운영 이력 window 추가 — 완료
 11. 저장소 내부 구조 결함의 bounded 상시 자기개선 권한 추가 — 완료
 12. cross-agent 호출형 하네스 건강 감사 Skill 추가 — 완료
-13. Standard 모듈 패키징 — 현재 `0.3.0` 범위 밖, 미래 릴리스의 명시적 재범위 필요
-14. Advanced 모듈 패키징 — 현재 `0.3.0` 범위 밖, 병목·가치 증거와 명시적 재범위 필요
+13. 요청형 다중 에이전트 안전 계약 추가 — 완료 (`HST-016`, `HC-022`)
+14. 상주 에이전트 컨텍스트·검증 비용 상한과 root Quick 경로 추가 — 완료 (`HST-017`)
+15. Standard 모듈 패키징 — 현재 `0.4.x` 범위 밖, 미래 릴리스의 명시적 재범위 필요
+16. Advanced 모듈 패키징 — 현재 `0.4.x` 범위 밖, 병목·가치 증거와 명시적 재범위 필요
 
 ## 성능·유지보수
 
@@ -254,22 +265,33 @@ redacted effective argv digest, `cwd`·timeout·출력 크기, 전체 설정 pro
 - 빠른 검증과 전체 검증을 분리하되, 완료에 필요한 레벨을 낮추지 않습니다.
 - 성공 출력은 짧게, 실패 출력은 실행 가능한 진단으로 만듭니다.
 - runner는 stdout/stderr를 계속 drain하되 각 stream의 bounded tail만
-  보관해 장시간·대출력 명령의 메모리 사용을 제한합니다.
+  보관하고 combined output, 외부 command 수와 총 timeout 합을 실행 전에
+  제한합니다.
 - 기능별 `tracked_files`는 명시 비용이 있지만 전체 저장소 재해시보다
   결정적이고 변경 영향 범위가 작습니다.
 - 상태 문서는 현재 사실만 유지하고, 내구 이력은 Git·완료 계획·결정 문서로
   이동합니다.
-- 항상 읽는 지침·상태 파일은 byte 상한을 두고, 기능마다 최신 전환 20개와
-  영수증 참조 5개만 운영 원장에 유지합니다. 실제 영수증 파일은 보존합니다.
+- 상시 `AGENTS`·`CLAUDE`·`STATE`는 합계 12 KiB, 조건부 문서는 별도 byte
+  상한을 두고, 기능 256개·기능별 추적 128개·고유 추적 256 MiB·최근 전환
+  20개·영수증 참조 5개·감사당 고유 영수증 64 MiB·Git 조회 10초로 감사량을
+  제한합니다. 실제 영수증은 보존합니다.
+- Source 범위는 list 할당 전에 폭과 확장 edge를 검사하고, clean-state는
+  250,000개 entry를 streaming 순회하며 읽지 못한 subtree를 성공으로 숨기지
+  않습니다. root Quick도 live Source/Core 기대 개수와 self-audit 시간·출력을
+  독립적으로 제한합니다.
 - 자동 자기개선은 한 사용자 작업당 한 번, 기존 하네스 파일과 집중 검사로
   제한합니다. 추가 후보는 보고만 하여 개선이 개선을 연쇄 생성하지 않게 합니다.
 - 건강 감사 Skill은 호출할 때만 정본을 읽고 기존 `harness.py audit`를 한 번
   재사용합니다. Claude 포인터에는 감사 규칙을 복제하지 않습니다.
+- 다중 에이전트 계약은 명시적 병렬 요청에서만 읽고, 일반 콜드 스타트의
+  상시 읽기 수와 `AGENTS.md` 8 KiB 상한을 유지합니다. 병렬 요청도 worker
+  2명·위임 0·round 2·review 1과 유한 deadline/context/handoff 예산 안에서만
+  실행합니다.
 - 구성 요소마다 재검토 트리거를 두고 절제 실험으로 삭제 가능성을 확인합니다.
 
 ## 롤백·안전한 마이그레이션
 
-- 초기 도입은 dry-run 뒤 제품 코드와 분리된 21개 하네스 파일만 추가합니다.
+- 초기 도입은 dry-run 뒤 제품 코드와 분리된 22개 하네스 파일만 추가합니다.
 - 각 프로필은 독립 커밋으로 적용해 제거 가능하게 합니다.
 - 업그레이드·제거는 설치 manifest가 소유권과 현재 digest를 증명하는
   파일만 변경하고, downgrade·호환되지 않는 버전을 거부하며, 쓰기 전
@@ -283,6 +305,10 @@ redacted effective argv digest, `cwd`·timeout·출력 크기, 전체 설정 pro
   하나의 canonical surface로 전환합니다.
 - `0.3.0` 수동 채택 시 기능별 전환은 최신 20개, 영수증 참조는 최신 5개로
   검토·축약하되 `.harness/evidence/`의 영수증 파일은 삭제하지 않습니다.
+- `0.3.x`에서 `0.4.x`로의 자동 업그레이드는 거부합니다. 기존 manifest와
+  영수증을 보존하고 22개 파일을 검토해 수동 병합한 뒤 audit·플랫폼 init·
+  영향을 받은 완료 gate를 재실행하고, 호환 마이그레이션 경로로만 manifest
+  기준선을 전진시킵니다.
 - 자동 상태 전환은 영수증 이력을 남기며, 수동 복구 경로를 제공합니다.
 
 ## 과설계 방지 게이트

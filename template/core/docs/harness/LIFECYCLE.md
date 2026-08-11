@@ -23,6 +23,34 @@ file or manifest-baseline transition is a true no-op: it does not rewrite the
 manifest, create a backup, or add a timestamp. Incompatible transitions require
 a newer compatible installer or a separately reviewed manual adoption.
 
+Core `0.4.0` adds the managed `docs/AGENT_COORDINATION.md` file and its
+on-demand route, audit checks, and provenance links. The same unreleased minor
+line also distinguishes profile-wide and feature-scoped gates, rejects recursive
+init, reuses valid audits, bounds aggregate gate, receipt, Git, clean-state and
+resident-context work, and adds finite coordination budgets. Omitted schema-v1
+runner budgets keep finite defaults and omitted gate scope keeps the prior
+profile-wide meaning, but these new hard safety limits can reject a formerly
+accepted extreme configuration. The pre-1.0 policy therefore intentionally
+refuses an automatic `0.3.x` to `0.4.x` upgrade. Adopt it through a reviewed
+manual merge:
+
+1. preserve the `0.3.x` install manifest, local managed-file changes, receipts,
+   and a recoverable backup;
+2. compare all 22 incoming managed files, add `docs/AGENT_COORDINATION.md`, and
+   merge the AGENTS route, validator, component/source ledgers, tracked-file
+   set, lifecycle text, and version without overwriting project adaptations;
+3. run `python3 scripts/harness.py audit`, the platform init adapter, and any
+   affected completion gates; treat older receipts as history when their
+   tracked or execution-contract version is no longer current;
+4. advance the manifest baseline only with a separately reviewed compatible
+   migration path after those checks pass.
+
+`--accept-merged` acknowledges file conflicts inside an otherwise compatible
+upgrade; it is not a bypass for the pre-1.0 minor-version guard. To roll back
+an incomplete adoption, restore the preserved `0.3.x` files and manifest
+together and remove only the newly introduced coordination file after proving
+it has no project-authored changes.
+
 Core `0.3.0` introduces schema-v4 receipts with an execution-scoped
 configuration freshness digest, bounded startup/operational context, and a
 repository-local autonomous structural-improvement contract. It also installs

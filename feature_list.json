@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "harness-engineering-starter-lite",
-  "last_updated": "2026-08-09",
+  "last_updated": "2026-08-10",
   "rules": {
     "max_active_features": 1,
     "passing_requires_evidence": true,
@@ -248,7 +248,7 @@
         "SRC-SKL-001",
         "SRC-PRJ-005..007"
       ],
-      "notes": "Intentionally out of scope by user decision on 2026-07-25 and not re-scoped for Core 0.3.0. Reconsider only when a future release explicitly re-scopes an observed governance or observability bottleneck; this is not pending work for the current release."
+      "notes": "Intentionally out of scope by user decision on 2026-07-25 and not re-scoped for Core 0.4.0. HST-016 adds only a narrow host-neutral safety contract; it does not implement this orchestration package. Reconsider only when a future release explicitly re-scopes an observed governance or observability bottleneck."
     },
     {
       "id": "HST-009",
@@ -437,6 +437,65 @@
         "SRC-PRJ-002"
       ],
       "notes": "Completed from an explicit real-adoption request on 2026-08-09. The reproduced defect was fixed by returning before the backup boundary only when file operations, version changes, and accepted manifest-baseline transitions are all absent. Effective same-version file changes still back up and refresh the manifest, making tracked evidence stale as intended. Modified managed files still make removal refuse before writes; that protection and manual project-specific configuration remain intentional adoption boundaries."
+    },
+    {
+      "id": "HST-016",
+      "priority": 16,
+      "area": "multi-agent-safety",
+      "title": "Add a Core multi-agent coordination safety contract",
+      "behavior": "Every installed Core project routes explicitly requested parallel agent work through one tool-neutral contract that preserves WIP=1, isolates each writer in a separate worktree, assigns disjoint ownership, reserves integration and state evidence for one lead, and requires lead re-verification plus risk-based independent review.",
+      "status": "passing",
+      "verification": [
+        "Install and route one on-demand agent-coordination:v1 contract without adding provider-specific orchestration or increasing normal cold-start context.",
+        "Make installed audit reject drift in explicit triggering, writer isolation, disjoint ownership, lead-only state and integration, structured handoff, evidence re-verification, and risk-based review clauses.",
+        "Install Core in an empty Git Fixture, exercise two disjoint writer worktrees and serialized lead integration, and keep non-Git or overlapping writes explicitly serial.",
+        "Release the new 22-file Core contract as 0.4.0 with complete component and Source traceability, reviewed pre-1 minor adoption guidance, and the full Windows baseline passing."
+      ],
+      "evidence": [
+        "python template/core/scripts/harness.py audit --template + python scripts/validate_harness.py -> Core audit healthy; required artifacts 37/37, Source traceability 65/65, feature/WIP/evidence and Core profile valid (2026-08-10)",
+        "Focused unittest trio -> every required coordination token drift was rejected with WHAT/WHY/FIX, two disjoint writer worktrees from one clean commit integrated serially without lead control-plane drift, and 0.3.9 to 0.4.0 automatic upgrade was refused (3/3 passed, 2026-08-10)",
+        "python -m unittest discover -s tests -v -> 47 tests run, 45 passed, 2 explicit environment skips for POSIX sh and unavailable Node; install, upgrade, rollback, remove, Windows adapter, state, receipt, and parallel-worktree regressions passed (2026-08-10)",
+        ".\\init.ps1 -> required artifacts 37/37, embedded Source traceability 65/65, feature/WIP/evidence and copy-ready Core checks passed; 47 Fixture tests ran with 45 passed and 2 explicit environment skips (2026-08-10)"
+      ],
+      "sources": [
+        "SRC-CH-007..009",
+        "SRC-TPL-001",
+        "SRC-TPL-006",
+        "SRC-TPL-010",
+        "SRC-PRJ-004",
+        "SRC-PRJ-006"
+      ],
+      "notes": "Completed by explicit user request on 2026-08-10 as Core 0.4.0. This is a bounded safety contract for host-provided parallel agents, not a task-claim, messaging, locking, or provider orchestration subsystem; HST-006 remains out of scope. Static checks cannot guarantee semantic compliance by every client or runtime, so clean-clone Codex and Claude smoke tests remain a runtime-change review trigger."
+    },
+    {
+      "id": "HST-017",
+      "priority": 17,
+      "area": "execution-cost-bounds",
+      "title": "Bound resident-agent context and validation cost",
+      "behavior": "Installed Core projects keep startup, gate execution, tracked evidence, failure output, and requested parallel-agent work within explicit finite budgets, reject recursive initialization, and execute feature-scoped checks only for the feature that binds them; the starter source checkout provides a quick startup preflight without weakening its full distribution baseline.",
+      "status": "passing",
+      "verification": [
+        "Reject recursive init paths and reuse an already completed repository audit inside init, verify, and complete while returning the bounded cold-start summary from the same standard init process.",
+        "Bound gate command count, aggregate declared timeout, retained failure output, feature and tracked-file audit work; execute feature-scoped commands only for a binding feature and keep receipt freshness exact.",
+        "Separate always-read and on-demand context with deterministic byte budgets, and require finite worker, round, review, timeout, token/context, delegation, handoff, and cleanup budgets in the parallel coordination contract.",
+        "Provide explicit root Quick startup on POSIX and Windows while retaining the existing full distribution suite as the default and completion gate, then pass focused regressions, template audit, root validator, installed Core smoke, and the full Windows baseline."
+      ],
+      "evidence": [
+        "python template/core/scripts/harness.py audit --template + python scripts/validate_harness.py -> Core profile audit healthy; required artifacts 38/38, embedded Source traceability 65/65, feature/WIP/evidence and copy-ready Core checks passed (2026-08-10)",
+        "Focused regressions -> init audit reuse and repository-scoped reentry, profile/feature gate selection, execution-contract receipt freshness, Git/source/receipt/tracked-file/clean-state bounds, finite timeout and output budgets, process-tree cleanup, root Quick watchdog, and coordination drift checks passed; an independent read-only review found no remaining P1/P2 issue (2026-08-10)",
+        ".\\init.ps1 with the bundled Python runtime on PATH -> full Windows completion baseline healthy; 54 tests ran in 94.254s with 52 passed and 2 explicit environment skips for POSIX sh and unavailable Node, and the wrapper completed in 96.222s (2026-08-10)",
+        ".\\init.ps1 -Quick with the bundled Python runtime on PATH -> required artifacts 38/38, Source traceability 65/65, feature/WIP/evidence and copy-ready Core checks passed in 1.838s; the no-argument full Windows adapter remains the completion gate (2026-08-10)"
+      ],
+      "sources": [
+        "SRC-CH-004..007",
+        "SRC-CH-009..012",
+        "SRC-TPL-001",
+        "SRC-TPL-006",
+        "SRC-TPL-008",
+        "SRC-ADV-009",
+        "SRC-PRJ-006..007"
+      ],
+      "notes": "Completed on 2026-08-10 in the same unreleased Core 0.4.0 minor that introduced HST-016; Git HEAD was still 0.3.0, so no backward-compatible 0.4.0-to-0.4.1 patch claim is made. The observed root 83.4-second Windows baseline belongs to the starter distribution suite, not installed Core init. Repository contracts bound declared coordination work but cannot override a higher-priority host delegation policy, prove provider token accounting, or guarantee semantic compliance without clean-client smoke tests."
     }
   ]
 }

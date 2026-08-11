@@ -65,6 +65,7 @@
         "LICENSE",
         "NOTICE",
         "VERSION",
+        "docs/AGENT_COORDINATION.md",
         "docs/ARCHITECTURE.md",
         "docs/COMMUNICATION.md",
         "docs/VALIDATION.md",
@@ -81,7 +82,12 @@
       "history": [],
       "sources": [
         "SRC-CH-003",
-        "SRC-CH-005..008",
+        "SRC-CH-005..009",
+        "SRC-TPL-001",
+        "SRC-TPL-006",
+        "SRC-TPL-010",
+        "SRC-PRJ-004",
+        "SRC-PRJ-006",
         "SRC-REF-001",
         "SRC-REF-004"
       ],

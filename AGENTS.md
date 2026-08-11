@@ -32,8 +32,8 @@
 3. `feature_list.json` 전체 이력 대신 active 또는 가장 높은 우선순위의
    미완료 레코드만 확인합니다.
 4. `docs/design-proposal.md`에서는 변경 대상과 관련된 절만 확인합니다.
-5. POSIX에서는 `./init.sh`, Windows PowerShell에서는 `.\init.ps1`을
-   실행합니다.
+5. POSIX에서는 `./init.sh --quick`, Windows PowerShell에서는
+   `.\init.ps1 -Quick`으로 빠른 기준선을 실행합니다.
 
 ## 작업 규칙
 
@@ -47,8 +47,17 @@
 - 반복되는 리뷰 의견은 가능한 경우 작고 실행 가능한 검사로 승격합니다.
 - 구조적 결함은 재현·권한·종료 조건을 확인한 뒤 한 가지 최소 수정으로
   개선하고, 규칙을 계속 덧붙이지 말고 기존 내용을 통합하거나 교체합니다.
-- 기준선과 종료 시 전체 init을 실행하고, 구현 중에는 관련 집중 검사를
-  우선합니다.
+- 시작 기준선은 Quick으로 실행하고, 종료 시에는 인자 없는 전체 init을 한 번
+  실행합니다. 구현 중에는 관련 집중 검사를 우선합니다.
+
+<!-- harness:agent-coordination:v1 -->
+## 복수 에이전트 작업
+
+사용자가 복수 에이전트 또는 병렬 작업을 명시적으로 요청한 경우에만
+`template/core/docs/AGENT_COORDINATION.md`를 읽고 같은 계약을 이 저장소에도
+적용합니다. 일반 작업에서 에이전트를 자동으로 생성하지 않습니다.
+lead는 가장 작은 worker 수만 사용하고 worker는 하위 에이전트를 생성하지
+않으며, 상세 문서의 유한한 실행 예산을 배정 전에 확정합니다.
 
 ## 문서 라우팅
 
@@ -57,6 +66,8 @@
 - `docs/source-inventory.md`: 원본 자료의 완전성·무결성 원장
 - `docs/source-analysis.md`: 전수 분석 결과
 - `docs/design-proposal.md`: 구성 요소, 프로필, 근거 추적 및 구현 순서
+- `template/core/docs/AGENT_COORDINATION.md`: 명시적으로 요청된 병렬 작업의
+  격리·소유권·인계·직렬 통합 계약
 
 ## 완료 기준
 

@@ -5,7 +5,7 @@
       "id": "HC-001",
       "path": "AGENTS.md",
       "profile": "core",
-      "purpose": "Short progressive request, startup, autonomous structural-improvement, work, completion, and handoff router.",
+      "purpose": "Short progressive request, bounded startup context, autonomous structural-improvement, work, completion, and handoff router.",
       "applies_when": "Always.",
       "sources": [
         "SRC-CH-003",
@@ -69,7 +69,7 @@
       "id": "HC-005",
       "path": "scripts/harness.py",
       "profile": "core",
-      "purpose": "Audit, bounded state transitions, gate execution, execution-scoped receipt freshness, startup-context limits, and cold-start answers.",
+      "purpose": "Audit, bounded state transitions, scoped gate execution, versioned receipt freshness, finite tracked/receipt/Source/Git/clean-state work, process-group cleanup, init re-entry defense, and cold-start answers.",
       "applies_when": "Always.",
       "sources": [
         "SRC-CH-006",
@@ -306,6 +306,24 @@
       "validation": ["python3 scripts/harness.py audit"],
       "review_trigger": "Claude discovery changes, the pointer no longer resolves, or Claude-specific audit rules begin accumulating in the bridge.",
       "rollback": "Remove only this pointer and keep the canonical Skill available to Codex."
+    },
+    {
+      "id": "HC-022",
+      "path": "docs/AGENT_COORDINATION.md",
+      "profile": "core",
+      "purpose": "Define an on-demand, tool-neutral safety contract with finite worker, round, delegation, deadline, context, handoff, cleanup, and review budgets for isolated parallel work under one WIP feature and one lead-controlled integration path.",
+      "applies_when": "Only when the user explicitly requests multiple agents or parallel work and the work can be divided into independent ownership scopes.",
+      "sources": [
+        "SRC-CH-007..009",
+        "SRC-TPL-001",
+        "SRC-TPL-006",
+        "SRC-TPL-010",
+        "SRC-PRJ-004",
+        "SRC-PRJ-006"
+      ],
+      "validation": ["python3 scripts/harness.py audit", "./init.sh"],
+      "review_trigger": "A host, client, model, worktree implementation, or repeated parallel-work failure changes the isolation, handoff, integration, or review assumptions.",
+      "rollback": "Remove the coordination document and AGENTS route together, then restore the previous component/source ledgers, tracked-file set, and Core version."
     }
   ]
 }
